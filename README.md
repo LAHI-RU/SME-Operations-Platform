@@ -1,4 +1,4 @@
-@"
+
 # SME Order Fulfillment & Inventory Operations Platform
 
 A production-style SME operations platform for managing the complete workflow from customer order to inventory fulfillment and delivery.
@@ -32,4 +32,3 @@ Customer Order → Stock Check → Fulfillment → Procurement → Delivery
 - Continuous Integration
 - Continuous Deployment
 - AWS production deployment
-"@ | Set-Content README.md
