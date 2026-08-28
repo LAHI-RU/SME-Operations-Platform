@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Category;
+use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -70,16 +71,23 @@ test('a category can be updated', function () {
     ]);
 });
 
-test('a category can be deleted when it has no products', function () {
+test('a category with products cannot be deleted', function () {
     $category = Category::factory()->create();
+
+    Product::factory()->create([
+        'category_id' => $category->id,
+    ]);
 
     $response = $this->deleteJson("/api/v1/categories/{$category->id}");
 
     $response
-        ->assertSuccessful()
-        ->assertJsonPath('success', true);
+        ->assertStatus(409)
+        ->assertJsonPath(
+            'message',
+            'Category cannot be deleted because it has products.'
+        );
 
-    $this->assertDatabaseMissing('categories', [
+    $this->assertDatabaseHas('categories', [
         'id' => $category->id,
     ]);
 });
