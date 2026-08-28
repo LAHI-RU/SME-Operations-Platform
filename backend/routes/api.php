@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,4 +19,23 @@ Route::prefix('v1')->group(function (): void {
 
     Route::apiResource('categories', CategoryController::class);
     Route::apiResource('products', ProductController::class);
+    Route::get(
+        '/inventory/{product}',
+        [InventoryController::class, 'show']
+    );
+
+    Route::post(
+        '/inventory/{product}/stock-in',
+        [InventoryController::class, 'stockIn']
+    );
+
+    Route::post(
+        '/inventory/{product}/stock-out',
+        [InventoryController::class, 'stockOut']
+    );
+
+    Route::get(
+        '/inventory/{product}/transactions',
+        [InventoryController::class, 'transactions']
+    );
 });

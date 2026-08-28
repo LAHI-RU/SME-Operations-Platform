@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreProductRequest;
 use App\Http\Requests\Api\V1\UpdateProductRequest;
 use App\Http\Resources\Api\V1\ProductResource;
+use App\Models\Inventory;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 
@@ -16,7 +17,7 @@ class ProductController extends Controller
     public function index()
     {
         $products = Product::query()
-            ->with('category')
+            ->with(['category', 'inventory'])
             ->latest('id')
             ->paginate(15);
 
@@ -25,20 +26,29 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request): ProductResource
     {
-        $product = Product::create([
-            ...$request->validated(),
-            'is_active' => true,
-        ]);
+        $product = \DB::transaction(function () use ($request): Product {
+            $product = Product::create([
+                ...$request->validated(),
+                'is_active' => true,
+            ]);
 
-        return new ProductResource(
-            $product->refresh()->load('category')
-        );
+            Inventory::query()->create([
+                'product_id' => $product->id,
+                'quantity' => 0,
+            ]);
+
+            return $product
+                ->refresh()
+                ->load('category', 'inventory');
+        });
+
+        return new ProductResource($product);
     }
 
     public function show(Product $product): ProductResource
     {
         return new ProductResource(
-            $product->load('category')
+            $product->load(['category', 'inventory'])
         );
     }
 
