@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\SupplierController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -38,4 +40,7 @@ Route::prefix('v1')->group(function (): void {
         '/inventory/{product}/transactions',
         [InventoryController::class, 'transactions']
     );
+
+    Route::apiResource('customers', CustomerController::class);
+    Route::apiResource('suppliers', SupplierController::class);
 });
