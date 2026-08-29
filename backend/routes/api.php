@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\SalesOrderController;
 use App\Http\Controllers\Api\V1\SupplierController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,4 +44,18 @@ Route::prefix('v1')->group(function (): void {
 
     Route::apiResource('customers', CustomerController::class);
     Route::apiResource('suppliers', SupplierController::class);
+
+    Route::get('/orders', [SalesOrderController::class, 'index']);
+    Route::post('/orders', [SalesOrderController::class, 'store']);
+    Route::get('/orders/{salesOrder}', [SalesOrderController::class, 'show']);
+
+    Route::post(
+        '/orders/{salesOrder}/submit',
+        [SalesOrderController::class, 'submit']
+    );
+
+    Route::post(
+        '/orders/{salesOrder}/confirm',
+        [SalesOrderController::class, 'confirm']
+    );
 });

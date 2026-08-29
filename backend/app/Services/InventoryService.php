@@ -77,6 +77,54 @@ class InventoryService
         });
     }
 
+    public function removeStockWithinTransaction(
+        Product $product,
+        int $quantity,
+        string $type,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $notes = null,
+        ?int $createdBy = null,
+    ): Inventory {
+        $this->validateQuantity($quantity);
+
+        if (! in_array($type, ['SALE', 'ADJUSTMENT_OUT'], true)) {
+            throw new InvalidArgumentException(
+                "Invalid stock-out transaction type: {$type}"
+            );
+        }
+
+        $inventory = Inventory::query()
+            ->where('product_id', $product->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $inventory) {
+            throw new RuntimeException('Inventory record does not exist.');
+        }
+
+        if ($inventory->quantity < $quantity) {
+            throw new InsufficientStockException(
+                available: $inventory->quantity,
+                requested: $quantity,
+            );
+        }
+
+        $inventory->decrement('quantity', $quantity);
+
+        InventoryTransaction::query()->create([
+            'product_id' => $product->id,
+            'type' => $type,
+            'quantity' => -$quantity,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'notes' => $notes,
+            'created_by' => $createdBy,
+        ]);
+
+        return $inventory->refresh();
+    }
+
     public function removeStock(
         Product $product,
         int $quantity,
