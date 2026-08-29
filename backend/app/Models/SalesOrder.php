@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\OrderStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,6 +29,7 @@ class SalesOrder extends Model
         return [
             'order_date' => 'datetime',
             'total_amount' => 'decimal:2',
+            'status' => OrderStatus::class,
         ];
     }
 
@@ -44,5 +46,10 @@ class SalesOrder extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SalesOrderItem::class);
+    }
+
+    public function statusHistory(): HasMany
+    {
+        return $this->hasMany(SalesOrderStatusHistory::class);
     }
 }

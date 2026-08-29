@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\OrderStatus;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Inventory;
@@ -66,7 +67,7 @@ test('a draft order can be created', function () {
         quantity: 5,
     );
 
-    expect($order->status)->toBe('DRAFT');
+    expect($order->status)->toBe(OrderStatus::DRAFT);
     expect((float) $order->total_amount)
         ->toEqualWithDelta(
             (float) $product->selling_price * 5,
@@ -101,7 +102,7 @@ test('a draft order can be submitted', function () {
 
     $order = app(SalesOrderService::class)->submit($order);
 
-    expect($order->status)->toBe('SUBMITTED');
+    expect($order->status)->toBe(OrderStatus::SUBMITTED);
 });
 
 test('a submitted order is confirmed when enough stock exists', function () {
@@ -125,7 +126,7 @@ test('a submitted order is confirmed when enough stock exists', function () {
         createdBy: $user->id,
     );
 
-    expect($confirmedOrder->status)->toBe('CONFIRMED');
+    expect($confirmedOrder->status)->toBe(OrderStatus::CONFIRMED);
 
     $this->assertDatabaseHas('inventories', [
         'product_id' => $product->id,
@@ -162,7 +163,7 @@ test('an order becomes pending stock when inventory is insufficient', function (
         createdBy: $user->id,
     );
 
-    expect($result->status)->toBe('PENDING_STOCK');
+    expect($result->status)->toBe(OrderStatus::PENDING_STOCK);
 
     $this->assertDatabaseHas('inventories', [
         'product_id' => $product->id,
@@ -207,7 +208,7 @@ test('an order with multiple items confirms only when all stock is available', f
         createdBy: $user->id,
     );
 
-    expect($result->status)->toBe('CONFIRMED');
+    expect($result->status)->toBe(OrderStatus::CONFIRMED);
 
     $this->assertDatabaseHas('inventories', [
         'product_id' => $productA->id,
@@ -260,7 +261,7 @@ test('a confirmed order cannot be confirmed again', function () {
         createdBy: $user->id,
     );
 
-    expect($confirmed->status)->toBe('CONFIRMED');
+    expect($confirmed->status)->toBe(OrderStatus::CONFIRMED);
 
     expect(fn() => $service->confirm($confirmed))
         ->toThrow(

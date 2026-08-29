@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\OrderStatus;
+use App\Exceptions\InsufficientStockException;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\SalesOrder;
@@ -12,151 +14,151 @@ use RuntimeException;
 
 class SalesOrderService
 {
-    public function __construct(
-        private readonly InventoryService $inventoryService,
-        private readonly SalesOrderNumberService $numberService,
-    ) {}
+  public function __construct(
+    private readonly InventoryService $inventoryService,
+    private readonly SalesOrderNumberService $numberService,
+  ) {}
 
-    public function createDraft(
-        int $customerId,
-        int $createdBy,
-        array $items,
-        ?string $notes = null,
+  public function createDraft(
+    int $customerId,
+    int $createdBy,
+    array $items,
+    ?string $notes = null,
+  ): SalesOrder {
+    return DB::transaction(function () use (
+      $customerId,
+      $createdBy,
+      $items,
+      $notes,
     ): SalesOrder {
-        return DB::transaction(function () use (
-            $customerId,
-            $createdBy,
-            $items,
-            $notes,
-        ): SalesOrder {
-            $salesOrder = SalesOrder::query()->create([
-                'order_number' => $this->numberService->generate(),
-                'customer_id' => $customerId,
-                'created_by' => $createdBy,
-                'status' => 'DRAFT',
-                'order_date' => now(),
-                'total_amount' => 0,
-                'notes' => $notes,
-            ]);
+      $salesOrder = SalesOrder::query()->create([
+        'order_number' => $this->numberService->generate(),
+        'customer_id' => $customerId,
+        'created_by' => $createdBy,
+        'status' => OrderStatus::DRAFT,
+        'order_date' => now(),
+        'total_amount' => 0,
+        'notes' => $notes,
+      ]);
 
-            $total = 0;
+      $total = 0;
 
-            foreach ($items as $item) {
-                $product = Product::query()
-                    ->findOrFail($item['product_id']);
+      foreach ($items as $item) {
+        $product = Product::query()
+          ->findOrFail($item['product_id']);
 
-                $unitPrice = (float) $product->selling_price;
-                $quantity = (int) $item['quantity'];
-                $subtotal = $unitPrice * $quantity;
+        $unitPrice = (float) $product->selling_price;
+        $quantity = (int) $item['quantity'];
+        $subtotal = $unitPrice * $quantity;
 
-                $salesOrder->items()->create([
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'subtotal' => $subtotal,
-                ]);
-
-                $total += $subtotal;
-            }
-
-            $salesOrder->update([
-                'total_amount' => $total,
-            ]);
-
-            return $salesOrder
-                ->refresh()
-                ->load('customer', 'items.product');
-        });
-    }
-
-    public function submit(SalesOrder $salesOrder): SalesOrder
-    {
-        if ($salesOrder->status !== 'DRAFT') {
-            throw new RuntimeException(
-                'Only draft orders can be submitted.'
-            );
-        }
-
-        $salesOrder->update([
-            'status' => 'SUBMITTED',
+        $salesOrder->items()->create([
+          'product_id' => $product->id,
+          'quantity' => $quantity,
+          'unit_price' => $unitPrice,
+          'subtotal' => $subtotal,
         ]);
 
-        return $salesOrder->refresh();
+        $total += $subtotal;
+      }
+
+      $salesOrder->update([
+        'total_amount' => $total,
+      ]);
+
+      return $salesOrder
+        ->refresh()
+        ->load('customer', 'items.product');
+    });
+  }
+
+  public function submit(SalesOrder $salesOrder): SalesOrder
+  {
+    if ($salesOrder->status !== OrderStatus::DRAFT) {
+      throw new RuntimeException(
+        'Only draft orders can be submitted.'
+      );
     }
 
-    public function confirm(
-        SalesOrder $salesOrder,
-        ?int $createdBy = null,
+    $salesOrder->update([
+      'status' => OrderStatus::SUBMITTED,
+    ]);
+
+    return $salesOrder->refresh();
+  }
+
+  public function confirm(
+    SalesOrder $salesOrder,
+    ?int $createdBy = null,
+  ): SalesOrder {
+    return DB::transaction(function () use (
+      $salesOrder,
+      $createdBy,
     ): SalesOrder {
-        return DB::transaction(function () use (
-            $salesOrder,
-            $createdBy,
-        ): SalesOrder {
-            $order = SalesOrder::query()
-                ->whereKey($salesOrder->id)
-                ->with('items.product')
-                ->lockForUpdate()
-                ->firstOrFail();
+      $order = SalesOrder::query()
+        ->whereKey($salesOrder->id)
+        ->with('items.product')
+        ->lockForUpdate()
+        ->firstOrFail();
 
-            if ($order->status !== 'SUBMITTED') {
-                throw new RuntimeException(
-                    'Only submitted orders can be confirmed.'
-                );
-            }
+      if ($order->status !== OrderStatus::SUBMITTED) {
+        throw new RuntimeException(
+          'Only submitted orders can be confirmed.'
+        );
+      }
 
-            /*
-               * Lock every inventory row before checking stock.
-               * This prevents concurrent orders from consuming the
-               * same stock at the same time.
-               */
-            foreach ($order->items as $item) {
-                $inventory = Inventory::query()
-                    ->where('product_id', $item->product_id)
-                    ->lockForUpdate()
-                    ->first();
+      $items = $order->items
+        ->sortBy('product_id')
+        ->values();
 
-                if (! $inventory) {
-                    throw new RuntimeException(
-                        "No inventory record exists for product {$item->product_id}."
-                    );
-                }
+      /*
+             * Lock and check every inventory row before changing anything.
+             */
+      foreach ($items as $item) {
+        $inventory = Inventory::query()
+          ->where('product_id', $item->product_id)
+          ->lockForUpdate()
+          ->first();
 
-                if ($inventory->quantity < $item->quantity) {
-                    $order->update([
-                        'status' => 'PENDING_STOCK',
-                    ]);
+        if (! $inventory) {
+          throw new RuntimeException(
+            "No inventory record exists for product {$item->product_id}."
+          );
+        }
 
-                    return $order->refresh()->load(
-                        'customer',
-                        'items.product'
-                    );
-                }
-            }
+        if ($inventory->quantity < $item->quantity) {
+          $order->update([
+            'status' => OrderStatus::PENDING_STOCK,
+          ]);
 
-            /*
-               * All inventory requirements have passed.
-               * Deduct stock and create transaction records.
-               */
-            foreach ($order->items as $item) {
-                $this->inventoryService->removeStockWithinTransaction(
-                    product: $item->product,
-                    quantity: $item->quantity,
-                    type: 'SALE',
-                    referenceType: 'SalesOrder',
-                    referenceId: $order->id,
-                    notes: "Stock issued for {$order->order_number}.",
-                    createdBy: $createdBy,
-                );
-            }
+          return $order
+            ->refresh()
+            ->load('customer', 'items.product');
+        }
+      }
 
-            $order->update([
-                'status' => 'CONFIRMED',
-            ]);
+      /*
+             * All stock checks passed.
+             * Now deduct stock and create inventory transactions.
+             */
+      foreach ($items as $item) {
+        $this->inventoryService->removeStockWithinTransaction(
+          product: $item->product,
+          quantity: $item->quantity,
+          type: 'SALE',
+          referenceType: 'SalesOrder',
+          referenceId: $order->id,
+          notes: "Stock issued for {$order->order_number}.",
+          createdBy: $createdBy,
+        );
+      }
 
-            return $order->refresh()->load(
-                'customer',
-                'items.product'
-            );
-        });
-    }
+      $order->update([
+        'status' => OrderStatus::CONFIRMED,
+      ]);
+
+      return $order
+        ->refresh()
+        ->load('customer', 'items.product');
+    });
+  }
 }
