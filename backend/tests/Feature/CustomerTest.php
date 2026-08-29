@@ -3,14 +3,21 @@
 declare(strict_types=1);
 
 use App\Models\Customer;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    $this->user = User::factory()->create();
+});
+
 test('customers can be listed', function () {
     Customer::factory()->count(3)->create();
 
-    $response = $this->getJson('/api/v1/customers');
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/customers');
 
     $response
         ->assertSuccessful()
@@ -18,12 +25,14 @@ test('customers can be listed', function () {
 });
 
 test('a customer can be created', function () {
-    $response = $this->postJson('/api/v1/customers', [
-        'name' => 'ABC Fashion',
-        'phone' => '0712345678',
-        'email' => 'abc@example.com',
-        'address' => 'Kandy',
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/customers', [
+            'name' => 'ABC Fashion',
+            'phone' => '0712345678',
+            'email' => 'abc@example.com',
+            'address' => 'Kandy',
+        ]);
 
     $response
         ->assertCreated()
@@ -38,7 +47,9 @@ test('a customer can be created', function () {
 });
 
 test('customer requires a name and phone', function () {
-    $response = $this->postJson('/api/v1/customers', []);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/customers', []);
 
     $response
         ->assertUnprocessable()
@@ -49,11 +60,13 @@ test('customer requires a name and phone', function () {
 });
 
 test('customer email must be valid', function () {
-    $response = $this->postJson('/api/v1/customers', [
-        'name' => 'ABC Fashion',
-        'phone' => '0712345678',
-        'email' => 'invalid-email',
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/customers', [
+            'name' => 'ABC Fashion',
+            'phone' => '0712345678',
+            'email' => 'invalid-email',
+        ]);
 
     $response
         ->assertUnprocessable()
@@ -63,13 +76,15 @@ test('customer email must be valid', function () {
 test('a customer can be updated', function () {
     $customer = Customer::factory()->create();
 
-    $response = $this->putJson("/api/v1/customers/{$customer->id}", [
-        'name' => 'Updated Customer',
-        'phone' => '0777777777',
-        'email' => 'updated@example.com',
-        'address' => 'Colombo',
-        'is_active' => false,
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/customers/{$customer->id}", [
+            'name' => 'Updated Customer',
+            'phone' => '0777777777',
+            'email' => 'updated@example.com',
+            'address' => 'Colombo',
+            'is_active' => false,
+        ]);
 
     $response
         ->assertSuccessful()
@@ -86,9 +101,9 @@ test('a customer can be updated', function () {
 test('a customer can be deleted', function () {
     $customer = Customer::factory()->create();
 
-    $response = $this->deleteJson(
-        "/api/v1/customers/{$customer->id}"
-    );
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->deleteJson("/api/v1/customers/{$customer->id}");
 
     $response
         ->assertSuccessful()

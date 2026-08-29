@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\InventoryController;
@@ -20,42 +21,63 @@ Route::prefix('v1')->group(function (): void {
         ]);
     });
 
-    Route::apiResource('categories', CategoryController::class);
-    Route::apiResource('products', ProductController::class);
-    Route::get(
-        '/inventory/{product}',
-        [InventoryController::class, 'show']
-    );
+    Route::post('/auth/login', [AuthController::class, 'login']);
 
-    Route::post(
-        '/inventory/{product}/stock-in',
-        [InventoryController::class, 'stockIn']
-    );
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::get('/auth/me', [AuthController::class, 'me']);
 
-    Route::post(
-        '/inventory/{product}/stock-out',
-        [InventoryController::class, 'stockOut']
-    );
+        Route::get('/orders', [SalesOrderController::class, 'index']);
+        Route::post('/orders', [SalesOrderController::class, 'store']);
+        Route::get('/orders/{salesOrder}', [SalesOrderController::class, 'show']);
 
-    Route::get(
-        '/inventory/{product}/transactions',
-        [InventoryController::class, 'transactions']
-    );
+        Route::post(
+            '/orders/{salesOrder}/submit',
+            [SalesOrderController::class, 'submit']
+        );
 
-    Route::apiResource('customers', CustomerController::class);
-    Route::apiResource('suppliers', SupplierController::class);
+        Route::post(
+            '/orders/{salesOrder}/confirm',
+            [SalesOrderController::class, 'confirm']
+        );
 
-    Route::get('/orders', [SalesOrderController::class, 'index']);
-    Route::post('/orders', [SalesOrderController::class, 'store']);
-    Route::get('/orders/{salesOrder}', [SalesOrderController::class, 'show']);
+        Route::apiResource('categories', CategoryController::class);
+        Route::apiResource('products', ProductController::class);
+        Route::get(
+            '/inventory/{product}',
+            [InventoryController::class, 'show']
+        );
 
-    Route::post(
-        '/orders/{salesOrder}/submit',
-        [SalesOrderController::class, 'submit']
-    );
+        Route::post(
+            '/inventory/{product}/stock-in',
+            [InventoryController::class, 'stockIn']
+        );
 
-    Route::post(
-        '/orders/{salesOrder}/confirm',
-        [SalesOrderController::class, 'confirm']
-    );
+        Route::post(
+            '/inventory/{product}/stock-out',
+            [InventoryController::class, 'stockOut']
+        );
+
+        Route::get(
+            '/inventory/{product}/transactions',
+            [InventoryController::class, 'transactions']
+        );
+
+        Route::apiResource('customers', CustomerController::class);
+        Route::apiResource('suppliers', SupplierController::class);
+
+        Route::get('/orders', [SalesOrderController::class, 'index']);
+        Route::post('/orders', [SalesOrderController::class, 'store']);
+        Route::get('/orders/{salesOrder}', [SalesOrderController::class, 'show']);
+
+        Route::post(
+            '/orders/{salesOrder}/submit',
+            [SalesOrderController::class, 'submit']
+        );
+
+        Route::post(
+            '/orders/{salesOrder}/confirm',
+            [SalesOrderController::class, 'confirm']
+        );
+    });
 });

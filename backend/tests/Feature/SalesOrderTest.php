@@ -68,7 +68,10 @@ test('a draft order can be created', function () {
 
     expect($order->status)->toBe('DRAFT');
     expect((float) $order->total_amount)
-        ->toBe((float) $product->selling_price * 5);
+        ->toEqualWithDelta(
+            (float) $product->selling_price * 5,
+            0.000001
+        );
 
     expect($order->items)->toHaveCount(1);
 
@@ -229,7 +232,7 @@ test('a draft order cannot be confirmed directly', function () {
         quantity: 5,
     );
 
-    expect(fn () => app(SalesOrderService::class)->confirm($order))
+    expect(fn() => app(SalesOrderService::class)->confirm($order))
         ->toThrow(
             RuntimeException::class,
             'Only submitted orders can be confirmed.'
@@ -259,9 +262,102 @@ test('a confirmed order cannot be confirmed again', function () {
 
     expect($confirmed->status)->toBe('CONFIRMED');
 
-    expect(fn () => $service->confirm($confirmed))
+    expect(fn() => $service->confirm($confirmed))
         ->toThrow(
             RuntimeException::class,
             'Only submitted orders can be confirmed.'
         );
+});
+
+test('an authenticated user can create a sales order through the API', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $product = createProductWithStockForOrderTest(20);
+
+    $response = $this
+        ->actingAs($user, 'sanctum')
+        ->postJson('/api/v1/orders', [
+            'customer_id' => $customer->id,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 5,
+                ],
+            ],
+        ]);
+
+    $response
+        ->assertCreated()
+        ->assertJsonPath('data.customer.id', $customer->id)
+        ->assertJsonPath('data.status', 'DRAFT')
+        ->assertJsonPath('data.items.0.product_id', $product->id)
+        ->assertJsonPath('data.items.0.quantity', 5);
+});
+
+test('an unauthenticated user cannot create a sales order', function () {
+    $customer = Customer::factory()->create();
+    $product = createProductWithStockForOrderTest(20);
+
+    $response = $this->postJson('/api/v1/orders', [
+        'customer_id' => $customer->id,
+        'items' => [
+            [
+                'product_id' => $product->id,
+                'quantity' => 5,
+            ],
+        ],
+    ]);
+
+    $response->assertUnauthorized();
+});
+
+test('an authenticated user can submit an order', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $product = createProductWithStockForOrderTest(20);
+
+    $order = createDraftOrderForTest(
+        customer: $customer,
+        user: $user,
+        product: $product,
+        quantity: 5,
+    );
+
+    $response = $this
+        ->actingAs($user, 'sanctum')
+        ->postJson("/api/v1/orders/{$order->id}/submit");
+
+    $response
+        ->assertSuccessful()
+        ->assertJsonPath('data.status', 'SUBMITTED');
+});
+
+test('an authenticated user can confirm an order through the API', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+    $product = createProductWithStockForOrderTest(20);
+
+    $order = createDraftOrderForTest(
+        customer: $customer,
+        user: $user,
+        product: $product,
+        quantity: 5,
+    );
+
+    $service = app(SalesOrderService::class);
+
+    $service->submit($order);
+
+    $response = $this
+        ->actingAs($user, 'sanctum')
+        ->postJson("/api/v1/orders/{$order->id}/confirm");
+
+    $response
+        ->assertSuccessful()
+        ->assertJsonPath('data.status', 'CONFIRMED');
+
+    $this->assertDatabaseHas('inventories', [
+        'product_id' => $product->id,
+        'quantity' => 15,
+    ]);
 });

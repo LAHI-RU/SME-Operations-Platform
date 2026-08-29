@@ -4,14 +4,21 @@ declare(strict_types=1);
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    $this->user = User::factory()->create();
+});
+
 test('products can be listed', function () {
     Product::factory()->count(3)->create();
 
-    $response = $this->getJson('/api/v1/products');
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/products');
 
     $response
         ->assertSuccessful()
@@ -23,15 +30,17 @@ test('a product can be created', function () {
         'name' => 'Polo Shirts',
     ]);
 
-    $response = $this->postJson('/api/v1/products', [
-        'category_id' => $category->id,
-        'sku' => 'POL-BLU-001',
-        'name' => 'Blue Polo Shirt',
-        'description' => 'Blue polo shirt',
-        'cost_price' => 2400,
-        'selling_price' => 3500,
-        'reorder_level' => 10,
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'category_id' => $category->id,
+            'sku' => 'POL-BLU-001',
+            'name' => 'Blue Polo Shirt',
+            'description' => 'Blue polo shirt',
+            'cost_price' => 2400,
+            'selling_price' => 3500,
+            'reorder_level' => 10,
+        ]);
 
     $response
         ->assertCreated()
@@ -54,14 +63,16 @@ test('product sku must be unique', function () {
         'sku' => 'POL-BLU-001',
     ]);
 
-    $response = $this->postJson('/api/v1/products', [
-        'category_id' => $category->id,
-        'sku' => 'POL-BLU-001',
-        'name' => 'Another Product',
-        'cost_price' => 1000,
-        'selling_price' => 1500,
-        'reorder_level' => 5,
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'category_id' => $category->id,
+            'sku' => 'POL-BLU-001',
+            'name' => 'Another Product',
+            'cost_price' => 1000,
+            'selling_price' => 1500,
+            'reorder_level' => 5,
+        ]);
 
     $response
         ->assertUnprocessable()
@@ -69,14 +80,16 @@ test('product sku must be unique', function () {
 });
 
 test('product category must exist', function () {
-    $response = $this->postJson('/api/v1/products', [
-        'category_id' => 999999,
-        'sku' => 'POL-BLU-002',
-        'name' => 'Blue Polo Shirt',
-        'cost_price' => 2400,
-        'selling_price' => 3500,
-        'reorder_level' => 10,
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'category_id' => 999999,
+            'sku' => 'POL-BLU-002',
+            'name' => 'Blue Polo Shirt',
+            'cost_price' => 2400,
+            'selling_price' => 3500,
+            'reorder_level' => 10,
+        ]);
 
     $response
         ->assertUnprocessable()
@@ -92,16 +105,18 @@ test('a product can be updated', function () {
         'name' => 'Blue Polo Shirt',
     ]);
 
-    $response = $this->putJson("/api/v1/products/{$product->id}", [
-        'category_id' => $category->id,
-        'sku' => 'POL-BLU-001',
-        'name' => 'Blue Polo Shirt Premium',
-        'description' => 'Updated product',
-        'cost_price' => 2500,
-        'selling_price' => 3800,
-        'reorder_level' => 12,
-        'is_active' => false,
-    ]);
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/products/{$product->id}", [
+            'category_id' => $category->id,
+            'sku' => 'POL-BLU-001',
+            'name' => 'Blue Polo Shirt Premium',
+            'description' => 'Updated product',
+            'cost_price' => 2500,
+            'selling_price' => 3800,
+            'reorder_level' => 12,
+            'is_active' => false,
+        ]);
 
     $response
         ->assertSuccessful()
@@ -118,7 +133,9 @@ test('a product can be updated', function () {
 test('a product can be deleted', function () {
     $product = Product::factory()->create();
 
-    $response = $this->deleteJson("/api/v1/products/{$product->id}");
+    $response = $this
+        ->actingAs($this->user, 'sanctum')
+        ->deleteJson("/api/v1/products/{$product->id}");
 
     $response
         ->assertSuccessful()
