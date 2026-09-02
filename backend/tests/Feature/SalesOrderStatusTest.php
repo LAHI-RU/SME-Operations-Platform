@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Enums\OrderStatus;
-use App\Models\Customer;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderStatusHistory;
 use App\Models\User;
@@ -43,7 +42,7 @@ test('an invalid status transition is rejected', function () {
         'status' => OrderStatus::DRAFT,
     ]);
 
-    expect(fn() => app(SalesOrderStatusService::class)->transition(
+    expect(fn () => app(SalesOrderStatusService::class)->transition(
         salesOrder: $order,
         toStatus: OrderStatus::DELIVERED,
         changedBy: $user->id,
@@ -65,7 +64,7 @@ test('an order cannot transition to the same status', function () {
         'status' => OrderStatus::DRAFT,
     ]);
 
-    expect(fn() => app(SalesOrderStatusService::class)->transition(
+    expect(fn () => app(SalesOrderStatusService::class)->transition(
         salesOrder: $order,
         toStatus: OrderStatus::DRAFT,
         changedBy: $user->id,
@@ -179,7 +178,7 @@ test('delivered order cannot transition to another status', function () {
         'status' => OrderStatus::DELIVERED,
     ]);
 
-    expect(fn() => app(SalesOrderStatusService::class)->transition(
+    expect(fn () => app(SalesOrderStatusService::class)->transition(
         salesOrder: $order,
         toStatus: OrderStatus::CANCELLED,
         changedBy: $user->id,

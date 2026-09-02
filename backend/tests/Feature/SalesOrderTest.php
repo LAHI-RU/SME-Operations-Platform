@@ -233,7 +233,7 @@ test('a draft order cannot be confirmed directly', function () {
         quantity: 5,
     );
 
-    expect(fn() => app(SalesOrderService::class)->confirm($order))
+    expect(fn () => app(SalesOrderService::class)->confirm($order))
         ->toThrow(
             RuntimeException::class,
             'Only submitted orders can be confirmed.'
@@ -263,7 +263,7 @@ test('a confirmed order cannot be confirmed again', function () {
 
     expect($confirmed->status)->toBe(OrderStatus::CONFIRMED);
 
-    expect(fn() => $service->confirm($confirmed))
+    expect(fn () => $service->confirm($confirmed))
         ->toThrow(
             RuntimeException::class,
             'Only submitted orders can be confirmed.'

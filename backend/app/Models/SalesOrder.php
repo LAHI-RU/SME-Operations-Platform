@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SalesOrder extends Model
 {
@@ -51,5 +52,10 @@ class SalesOrder extends Model
     public function statusHistory(): HasMany
     {
         return $this->hasMany(SalesOrderStatusHistory::class);
+    }
+
+    public function fulfillment(): HasOne
+    {
+        return $this->hasOne(Fulfillment::class);
     }
 }
