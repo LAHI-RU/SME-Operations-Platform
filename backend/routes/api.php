@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\DeliveryController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SalesOrderController;
@@ -78,6 +79,26 @@ Route::prefix('v1')->group(function (): void {
         Route::post(
             '/orders/{salesOrder}/confirm',
             [SalesOrderController::class, 'confirm']
+        );
+
+        Route::post(
+            'orders/{salesOrder}/delivery/assign',
+            [DeliveryController::class, 'assign'],
+        );
+
+        Route::post(
+            'orders/{salesOrder}/delivery/start',
+            [DeliveryController::class, 'start'],
+        );
+
+        Route::post(
+            'orders/{salesOrder}/delivery/complete',
+            [DeliveryController::class, 'complete'],
+        );
+
+        Route::get(
+            'orders/{salesOrder}/delivery',
+            [DeliveryController::class, 'show'],
         );
     });
 });

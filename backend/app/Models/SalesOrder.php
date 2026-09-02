@@ -58,4 +58,9 @@ class SalesOrder extends Model
     {
         return $this->hasOne(Fulfillment::class);
     }
+
+    public function delivery(): HasOne
+    {
+        return $this->hasOne(Delivery::class);
+    }
 }
