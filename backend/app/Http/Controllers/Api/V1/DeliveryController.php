@@ -11,6 +11,7 @@ use App\Models\SalesOrder;
 use App\Services\DeliveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class DeliveryController extends Controller
 {
@@ -22,6 +23,8 @@ class DeliveryController extends Controller
         AssignDeliveryRequest $request,
         SalesOrder $salesOrder,
     ): DeliveryResource {
+        Gate::authorize('assignDelivery', $salesOrder);
+
         $delivery = $this->deliveryService->assign(
             salesOrder: $salesOrder,
             assignedTo: (int) $request->validated('assigned_to'),
@@ -35,6 +38,8 @@ class DeliveryController extends Controller
         Request $request,
         SalesOrder $salesOrder,
     ): DeliveryResource {
+        Gate::authorize('startDelivery', $salesOrder);
+
         $delivery = $this->deliveryService->start(
             salesOrder: $salesOrder,
             changedBy: (int) $request->user()->id,
@@ -47,6 +52,8 @@ class DeliveryController extends Controller
         Request $request,
         SalesOrder $salesOrder,
     ): DeliveryResource {
+        Gate::authorize('completeDelivery', $salesOrder);
+
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -61,8 +68,11 @@ class DeliveryController extends Controller
     }
 
     public function show(
+        Request $request,
         SalesOrder $salesOrder,
     ): DeliveryResource|JsonResponse {
+        Gate::authorize('viewDelivery', $salesOrder);
+
         $delivery = $salesOrder->delivery;
 
         if (! $delivery) {

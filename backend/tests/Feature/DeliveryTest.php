@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\DeliveryStatus;
 use App\Enums\OrderStatus;
+use App\Enums\UserRole;
+use App\Models\Delivery;
 use App\Models\SalesOrder;
 use App\Models\User;
 use App\Services\DeliveryService;
@@ -350,4 +352,102 @@ test('an unauthenticated user cannot view order delivery', function () {
     );
 
     $response->assertUnauthorized();
+});
+
+test('a sales user can assign a delivery through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $order = SalesOrder::factory()->create([
+        'status' => OrderStatus::READY_FOR_DELIVERY,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$order->id}/delivery/assign",
+        [
+            'assigned_to' => User::factory()->create([
+                'role' => UserRole::DELIVERY,
+            ])->id,
+        ],
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a warehouse user cannot assign a delivery', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $order = SalesOrder::factory()->create([
+        'status' => OrderStatus::READY_FOR_DELIVERY,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$order->id}/delivery/assign",
+        [
+            'assigned_to' => User::factory()->create([
+                'role' => UserRole::DELIVERY,
+            ])->id,
+        ],
+    );
+
+    $response->assertForbidden();
+});
+
+test('a delivery user can start delivery through the API', function () {
+    $deliveryUser = User::factory()->create([
+        'role' => UserRole::DELIVERY,
+    ]);
+
+    $order = SalesOrder::factory()->create([
+        'status' => OrderStatus::ASSIGNED,
+    ]);
+
+    Delivery::factory()->create([
+        'sales_order_id' => $order->id,
+        'status' => DeliveryStatus::ASSIGNED,
+        'assigned_to' => $deliveryUser->id,
+        'assigned_at' => now(),
+    ]);
+
+    $this->actingAs($deliveryUser, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$order->id}/delivery/start",
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot start delivery through the API', function () {
+    $salesUser = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $order = SalesOrder::factory()->create([
+        'status' => OrderStatus::ASSIGNED,
+    ]);
+
+    Delivery::factory()->create([
+        'sales_order_id' => $order->id,
+        'status' => DeliveryStatus::ASSIGNED,
+        'assigned_to' => User::factory()->create([
+            'role' => UserRole::DELIVERY,
+        ])->id,
+        'assigned_at' => now(),
+    ]);
+
+    $this->actingAs($salesUser, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$order->id}/delivery/start",
+    );
+
+    $response->assertForbidden();
 });
