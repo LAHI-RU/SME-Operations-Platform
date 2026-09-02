@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Delivery\AssignDeliveryRequest;
+use App\Http\Resources\DeliveryResource;
 use App\Models\SalesOrder;
 use App\Services\DeliveryService;
 use Illuminate\Http\JsonResponse;
@@ -20,36 +21,32 @@ class DeliveryController extends Controller
     public function assign(
         AssignDeliveryRequest $request,
         SalesOrder $salesOrder,
-    ): JsonResponse {
+    ): DeliveryResource {
         $delivery = $this->deliveryService->assign(
             salesOrder: $salesOrder,
             assignedTo: (int) $request->validated('assigned_to'),
             changedBy: (int) $request->user()->id,
         );
 
-        return response()->json([
-            'data' => $delivery,
-        ], 200);
+        return new DeliveryResource($delivery);
     }
 
     public function start(
         Request $request,
         SalesOrder $salesOrder,
-    ): JsonResponse {
+    ): DeliveryResource {
         $delivery = $this->deliveryService->start(
             salesOrder: $salesOrder,
             changedBy: (int) $request->user()->id,
         );
 
-        return response()->json([
-            'data' => $delivery,
-        ], 200);
+        return new DeliveryResource($delivery);
     }
 
     public function complete(
         Request $request,
         SalesOrder $salesOrder,
-    ): JsonResponse {
+    ): DeliveryResource {
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -60,14 +57,12 @@ class DeliveryController extends Controller
             notes: $validated['notes'] ?? null,
         );
 
-        return response()->json([
-            'data' => $delivery,
-        ], 200);
+        return new DeliveryResource($delivery);
     }
 
     public function show(
         SalesOrder $salesOrder,
-    ): JsonResponse {
+    ): DeliveryResource|JsonResponse {
         $delivery = $salesOrder->delivery;
 
         if (! $delivery) {
@@ -76,8 +71,6 @@ class DeliveryController extends Controller
             ], 404);
         }
 
-        return response()->json([
-            'data' => $delivery,
-        ], 200);
+        return new DeliveryResource($delivery);
     }
 }
