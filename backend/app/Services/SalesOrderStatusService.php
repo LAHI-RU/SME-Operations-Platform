@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\OrderStatus;
+use App\Exceptions\BusinessConflictException;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderStatusHistory;
 use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 
 class SalesOrderStatusService
 {
@@ -78,7 +78,7 @@ class SalesOrderStatusService
             $fromStatus = $order->status;
 
             if ($fromStatus === $toStatus) {
-                throw new InvalidArgumentException(
+                throw new BusinessConflictException(
                     'The order is already in this status.'
                 );
             }
@@ -88,7 +88,7 @@ class SalesOrderStatusService
             ] ?? [];
 
             if (! in_array($toStatus, $allowedStatuses, true)) {
-                throw new InvalidArgumentException(
+                throw new BusinessConflictException(
                     "Invalid order status transition: {$fromStatus->value} → {$toStatus->value}."
                 );
             }

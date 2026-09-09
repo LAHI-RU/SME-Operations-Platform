@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\OrderStatus;
+use App\Exceptions\BusinessConflictException;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderStatusHistory;
 use App\Models\User;
@@ -47,7 +48,7 @@ test('an invalid status transition is rejected', function () {
         toStatus: OrderStatus::DELIVERED,
         changedBy: $user->id,
     ))->toThrow(
-        InvalidArgumentException::class,
+        BusinessConflictException::class,
         'Invalid order status transition'
     );
 
@@ -69,7 +70,7 @@ test('an order cannot transition to the same status', function () {
         toStatus: OrderStatus::DRAFT,
         changedBy: $user->id,
     ))->toThrow(
-        InvalidArgumentException::class,
+        BusinessConflictException::class,
         'already in this status'
     );
 });
@@ -183,7 +184,7 @@ test('delivered order cannot transition to another status', function () {
         toStatus: OrderStatus::CANCELLED,
         changedBy: $user->id,
     ))->toThrow(
-        InvalidArgumentException::class,
+        BusinessConflictException::class,
         'Invalid order status transition'
     );
 });

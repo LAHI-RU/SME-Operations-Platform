@@ -1,7 +1,7 @@
 # Backend API contract
 
-Inspected: 2026-09-09. Updated through sub-checkpoint 02.1: authentication responses now expose the stored role. No frontend code has been created.
-Status: 02.1 implemented and verified; remaining Checkpoint 02 changes are pending.
+Inspected: 2026-09-09. Updated through sub-checkpoint 02.2: authentication exposes the stored role and known business conflicts return HTTP 409. No frontend code has been created.
+Status: 02.1 and 02.2 implemented and verified; remaining Checkpoint 02 changes are pending.
 
 ## Evidence and verification
 
@@ -9,10 +9,11 @@ Status: 02.1 implemented and verified; remaining Checkpoint 02 changes are pendi
 - Installed packages from `composer show --direct`: Laravel **13.29.0**, Sanctum **4.3.3**, Pest **4.7.8**. CLI PHP is 8.3.14.
 - `php vendor/bin/pest --compact --testsuite=Feature`: **115 passed, 256 assertions** using SQLite `:memory:` (7.327 seconds).
 - Sub-checkpoint 02.1 verification: the four new ADMIN/SALES role assertions failed before the controller change. Afterward, `php artisan test --compact tests/Feature/AuthTest.php` passed **9 tests / 29 assertions**, and `php artisan test` passed the complete suite with **118 tests / 269 assertions**, using SQLite `:memory:`. Both `php vendor/bin/pint --dirty --format agent` and `php vendor/bin/pint --test` passed.
+- Sub-checkpoint 02.2 verification: the business-error HTTP tests and updated status-service tests first showed **14 expected failures / 11 passes**. After implementation, `php artisan test --compact tests/Feature/BusinessExceptionTest.php tests/Feature/SalesOrderStatusTest.php` passed **26 tests / 96 assertions**. The complete suite passed **133 tests / 346 assertions**, using SQLite `:memory:`. Pint formatting and `php vendor/bin/pint --test` passed. HTTP tests verify exact conflict envelopes even with debug enabled, unchanged data after rejected operations, validation 422, missing-order 404, and generic production 500 responses for unexpected failures. Existing authentication/authorization tests remain green.
 - An initial Artisan test invocation forwarded `--no-interaction` to PHPUnit, which rejected it. The direct Pest invocation above corrected the command and passed.
 - Sources: `backend/routes/api.php`, all API controllers, requests, resources, models, enums, policies and services, `backend/bootstrap/app.php`, auth/Sanctum configuration, and existing feature tests.
 - Framework response details were checked against the installed `ResourceResponse`, `PaginatedResourceResponse`, `LengthAwarePaginator`, and exception handler source.
-- This is not a live PostgreSQL HTTP capture or browser integration test. Existing tests cover selected API and service behavior, not every payload, permission combination, or failure response. Search, assignment isolation, and several HTTP business-error paths need further coverage.
+- This is not a live PostgreSQL HTTP capture or browser integration test. Existing tests cover selected API and service behavior, not every payload, permission combination, or failure response. Search and assignment isolation still need further coverage.
 
 ## Authentication contract
 
@@ -171,13 +172,24 @@ The controllers do not append filters using `withQueryString()`. Keep the active
 | 401 | Framework JSON `{message}`; clear invalid auth state and require login |
 | 403 | Policy denial, framework JSON; show permission failure; debug mode can add exception details |
 | 404 | Missing bound model uses framework JSON; missing delivery explicitly returns `{message:"Delivery has not been created for this order."}` |
-| 409 | Category deletion with products: `{success:false,message}`; order confirmation catches `RuntimeException` and returns the same envelope |
+| 409 | Known workflow/stock conflicts: `{success:false,message}` through the `BusinessConflictException` renderer; category deletion with products retains the same existing envelope |
 | 422 | Laravel validation: `{message,errors:{field:[messages]}}`; invalid credentials also use this status |
 | 429 | No explicit application API/login throttle is configured in the inspected routes/bootstrap; retain future client handling without claiming a verified rate-limit contract |
 | 500 | Unhandled exceptions use framework rendering; with debug false, ordinary exceptions return `{message:"Server Error"}` |
 | Network error | No HTTP response/envelope; frontend must distinguish it from an API response |
 
-Invalid submit, fulfillment and delivery transitions throw runtime exceptions without controller/global business-error mapping. Insufficient manual stock-out throws `InsufficientStockException` without a renderer. These paths currently lead to **500**, not a reliable 409/422 contract (source-derived; the current service tests assert exceptions rather than all HTTP responses).
+Invalid submit/confirm, order status transitions, fulfillment and delivery operations now throw `BusinessConflictException`. `InsufficientStockException` extends it. The renderer in `bootstrap/app.php` returns HTTP **409** for API paths or requests expecting JSON, with only `success:false` and a safe business message, even when debug is enabled. For example:
+
+```json
+{
+  "success": false,
+  "message": "Only draft orders can be submitted."
+}
+```
+
+Only deliberate business exceptions receive this treatment. Generic `RuntimeException` and `InvalidArgumentException` are not globally converted. Missing inventory during order confirmation represents an internal data-integrity failure, so it returns **500** with a generic message when debug is false; the old broad controller catch has been removed. Inventory service guards for invalid type/quantity retain their programming-error exceptions, while request validation rejects those inputs as **422** before reaching the service. Missing route-bound resources remain **404**. Attempting to start an unassigned delivery is a **409** workflow conflict; reading a nonexistent delivery remains **404**.
+
+Order confirmation with insufficient stock still returns **200** with `status:PENDING_STOCK`; that existing business outcome and its retry behavior were not changed in 02.2. Transactions, row locks and allowed transitions are unchanged.
 
 Validation keys for order items use dotted paths such as `items.0.quantity`. Preserve them when mapping backend messages to form fields. Never render debug traces or treat every server-provided 500 message as suitable user-facing text.
 
@@ -238,7 +250,6 @@ These are findings and recommendations, not implemented changes.
 
 | Problem | Frontend/product impact | Smallest recommended direction |
 | --- | --- | --- |
-| Business exceptions return 500 | Users cannot distinguish a state conflict from a server fault | Map specific domain exceptions to consistent 409 responses; test HTTP failures |
 | PENDING_STOCK confirmation cannot retry | Replenished orders remain blocked | Align confirmation with the intended retry transition while preserving atomic stock checks and deductions |
 | Delivery ownership and assignee role unchecked | Assignment-only delivery UX has no matching backend boundary | Validate DELIVERY assignees, enforce ownership for drivers with ADMIN override, and scope reads if required |
 | No driver lookup | Cannot populate an authorized assignee selector | Add a minimal authorized delivery-user lookup returning only necessary fields |
@@ -261,6 +272,6 @@ php artisan route:list --path=api --no-interaction
 php artisan test --compact
 ```
 
-Expected: 39 registered API routes and a passing complete test suite (118 tests / 269 assertions after 02.1). The existing `phpunit.xml` selects SQLite `:memory:`; focused and full-suite results are verified above. Do not pass `--no-interaction` after the Artisan `test` command because the test runner receives it.
+Expected: 39 registered API routes and a passing complete test suite (133 tests / 346 assertions after 02.2). The existing `phpunit.xml` selects SQLite `:memory:`; focused and full-suite results are verified above. Do not pass `--no-interaction` after the Artisan `test` command because the test runner receives it.
 
-Send the test summary (or error output). Sub-checkpoint 02.1 is complete; stop until the user explicitly types `continue` before starting 02.2. The remaining gaps above are unchanged; Checkpoint 02 as a whole is not yet complete.
+Send the test summary (or error output). Sub-checkpoint 02.2 is complete; stop until the user explicitly types `continue` before starting 02.3 (PENDING_STOCK retry). The remaining gaps above are unchanged; Checkpoint 02 as a whole is not yet complete.

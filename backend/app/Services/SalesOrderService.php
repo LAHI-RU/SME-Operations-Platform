@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\OrderStatus;
+use App\Exceptions\BusinessConflictException;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\SalesOrder;
@@ -73,7 +74,7 @@ class SalesOrderService
     public function submit(SalesOrder $salesOrder): SalesOrder
     {
         if ($salesOrder->status !== OrderStatus::DRAFT) {
-            throw new RuntimeException(
+            throw new BusinessConflictException(
                 'Only draft orders can be submitted.'
             );
         }
@@ -100,7 +101,7 @@ class SalesOrderService
                 ->firstOrFail();
 
             if ($order->status !== OrderStatus::SUBMITTED) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only submitted orders can be confirmed.'
                 );
             }

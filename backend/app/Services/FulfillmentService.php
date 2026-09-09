@@ -6,10 +6,10 @@ namespace App\Services;
 
 use App\Enums\FulfillmentStatus;
 use App\Enums\OrderStatus;
+use App\Exceptions\BusinessConflictException;
 use App\Models\Fulfillment;
 use App\Models\SalesOrder;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 class FulfillmentService
 {
@@ -36,13 +36,13 @@ class FulfillmentService
                 ->first();
 
             if ($existingFulfillment) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Fulfillment has already been started for this order.'
                 );
             }
 
             if ($order->status !== OrderStatus::CONFIRMED) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only confirmed orders can start fulfillment.'
                 );
             }
@@ -78,19 +78,19 @@ class FulfillmentService
                 ->first();
 
             if (! $fulfillment) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Fulfillment has not been started.'
                 );
             }
 
             if ($order->status !== OrderStatus::PACKING) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only orders currently being packed can complete fulfillment.'
                 );
             }
 
             if ($fulfillment->status !== FulfillmentStatus::IN_PROGRESS) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only in-progress fulfillment can be completed.'
                 );
             }

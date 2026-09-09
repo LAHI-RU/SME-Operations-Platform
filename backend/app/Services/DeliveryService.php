@@ -6,10 +6,10 @@ namespace App\Services;
 
 use App\Enums\DeliveryStatus;
 use App\Enums\OrderStatus;
+use App\Exceptions\BusinessConflictException;
 use App\Models\Delivery;
 use App\Models\SalesOrder;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 class DeliveryService
 {
@@ -38,13 +38,13 @@ class DeliveryService
                 ->first();
 
             if ($existingDelivery) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Delivery has already been assigned.'
                 );
             }
 
             if ($order->status !== OrderStatus::READY_FOR_DELIVERY) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only orders ready for delivery can be assigned.'
                 );
             }
@@ -86,19 +86,19 @@ class DeliveryService
                 ->first();
 
             if (! $delivery) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Delivery has not been assigned.'
                 );
             }
 
             if ($delivery->status !== DeliveryStatus::ASSIGNED) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only assigned deliveries can start.'
                 );
             }
 
             if ($order->status !== OrderStatus::ASSIGNED) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only assigned orders can start delivery.'
                 );
             }
@@ -140,19 +140,19 @@ class DeliveryService
                 ->first();
 
             if (! $delivery) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Delivery has not been assigned.'
                 );
             }
 
             if ($delivery->status !== DeliveryStatus::OUT_FOR_DELIVERY) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only deliveries currently out for delivery can be completed.'
                 );
             }
 
             if ($order->status !== OrderStatus::OUT_FOR_DELIVERY) {
-                throw new RuntimeException(
+                throw new BusinessConflictException(
                     'Only orders out for delivery can be completed.'
                 );
             }

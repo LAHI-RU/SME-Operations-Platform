@@ -10,7 +10,6 @@ use App\Http\Requests\Api\V1\StoreSalesOrderRequest;
 use App\Http\Resources\Api\V1\SalesOrderResource;
 use App\Models\SalesOrder;
 use App\Services\SalesOrderService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -104,20 +103,13 @@ class SalesOrderController extends Controller
         SalesOrder $salesOrder,
         SalesOrderService $salesOrderService,
         Request $request,
-    ): SalesOrderResource|JsonResponse {
+    ): SalesOrderResource {
         Gate::authorize('confirm', $salesOrder);
 
-        try {
-            $order = $salesOrderService->confirm(
-                salesOrder: $salesOrder,
-                createdBy: $request->user()?->id,
-            );
-        } catch (\RuntimeException $exception) {
-            return response()->json([
-                'success' => false,
-                'message' => $exception->getMessage(),
-            ], 409);
-        }
+        $order = $salesOrderService->confirm(
+            salesOrder: $salesOrder,
+            createdBy: $request->user()?->id,
+        );
 
         return new SalesOrderResource(
             $order->load('customer', 'items.product')
