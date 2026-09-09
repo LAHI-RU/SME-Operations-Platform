@@ -10,6 +10,14 @@ let root
 let App
 let BrowserRouter
 let scrollCalls = 0
+const originalFetch = globalThis.fetch
+let authStore
+const account = { id: 8, name: 'Test Operator', email: 'operator@example.test', role: 'SALES' }
+let loginStatus = 200
+let loginCalls = 0
+let logoutStatus = 200
+let pendingLogin = null
+const response = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 before(async () => {
   dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
@@ -18,14 +26,28 @@ before(async () => {
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.scrollTo = () => { scrollCalls += 1 }
+  globalThis.fetch = async (url) => {
+    if (url.endsWith('/auth/login')) {
+      loginCalls += 1
+      if (pendingLogin) return pendingLogin.promise
+      if (loginStatus === 422) return response({ errors: { email: ['The provided credentials are incorrect.'] } }, 422)
+      if (loginStatus !== 200) throw new TypeError('offline')
+      return response({ success: true, message: 'OK', data: { user: account, token: 'test-token' } })
+    }
+    if (url.endsWith('/auth/logout')) return response({ success: true, message: 'OK', data: null }, logoutStatus)
+    return response({ success: true, message: 'OK', data: account })
+  }
   // Transform the actual TypeScript components with the app's Vite configuration.
   // This is DOM simulation, not a visual browser or CSS layout test.
   server = await createServer({
-    server: { middlewareMode: true, hmr: false },
+    cacheDir: 'node_modules/.vite-test-navigation',
+    server: { middlewareMode: true, hmr: false, ws: false, watch: null },
     optimizeDeps: { noDiscovery: true, include: [] },
     appType: 'custom',
   })
   App = (await server.ssrLoadModule('/src/App.tsx')).default
+  ;({ authStore } = await server.ssrLoadModule('/src/lib/api/index.ts'))
+  await authStore.login({ email: account.email, password: 'fixture-only' })
   BrowserRouter = (await import('react-router')).BrowserRouter
   const { createRoot } = await import('react-dom/client')
   root = createRoot(document.getElementById('root'))
@@ -40,6 +62,7 @@ after(async () => {
   delete globalThis.document
   delete globalThis.HTMLElement
   delete globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.fetch = originalFetch
 })
 
 async function visit(path) {
@@ -54,13 +77,14 @@ async function click(element) {
   await act(async () => element.click())
 }
 
-test('the root redirects to dashboard and keeps account actions unavailable', () => {
+test('the root redirects to dashboard and shows the authenticated account', () => {
   assert.equal(window.location.pathname, '/dashboard')
   assert.equal(document.title, 'Dashboard | SME Operations')
   assert.match(document.querySelector('main').textContent, /Live summaries will appear once/)
   const signOut = [...document.querySelectorAll('button')].find((button) => button.textContent.includes('Sign out'))
-  assert.equal(signOut.disabled, true)
-  assert.match(document.getElementById(signOut.getAttribute('aria-describedby')).textContent, /not connected yet/)
+  assert.equal(signOut.disabled, false)
+  assert.match(document.querySelector('header').textContent, /Test Operator/)
+  assert.match(document.querySelector('header').textContent, /SALES/)
 })
 
 test('all module deep links show the right heading, title, and active navigation', async () => {
@@ -156,4 +180,86 @@ test('unknown paths show a recoverable 404 without marking a module active', asy
   assert.equal(document.querySelectorAll('nav [aria-current="page"]').length, 0)
   await click(document.querySelector('main a[href="/dashboard"]'))
   assert.equal(document.querySelector('h1').textContent, 'Dashboard')
+})
+
+test('successful logout protects the workspace and routes to login', async () => {
+  await click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Sign out'))
+  assert.equal(window.location.pathname, '/login')
+  assert.equal(document.querySelector('aside'), null)
+  assert.equal(document.title, 'Sign in | SME Operations')
+})
+
+test('anonymous deep links go to login with validation, error focus, and no empty request', async () => {
+  await visit('/inventory?page=2')
+  assert.equal(window.location.pathname, '/login')
+  const previousCalls = loginCalls
+  await click(document.querySelector('button[type="submit"]'))
+  assert.equal(loginCalls, previousCalls)
+  assert.equal(document.activeElement.name, 'email')
+  assert.match(document.body.textContent, /Enter your email address/)
+})
+
+async function fillLogin() {
+  document.querySelector('input[name="email"]').value = account.email
+  document.querySelector('input[name="password"]').value = 'fixture-password'
+}
+
+test('password visibility toggles and invalid credentials show Laravel field feedback', async () => {
+  await fillLogin()
+  await click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Show password'))
+  assert.equal(document.querySelector('input[name="password"]').type, 'text')
+  loginStatus = 422
+  await click(document.querySelector('button[type="submit"]'))
+  assert.match(document.body.textContent, /The provided credentials are incorrect/)
+  assert.equal(document.activeElement.name, 'email')
+  assert.equal(document.querySelector('input[name="password"]').value, '')
+  assert.equal(window.location.pathname, '/login')
+})
+
+test('network login failure shows recoverable feedback without opening protected pages', async () => {
+  loginStatus = 503
+  await fillLogin()
+  await click(document.querySelector('button[type="submit"]'))
+  assert.match(document.body.textContent, /Could not reach the server/)
+  assert.equal(document.activeElement.getAttribute('role'), 'alert')
+  assert.equal(document.querySelector('button[type="submit"]').disabled, false)
+})
+
+test('successful login returns to the original internal deep link', async () => {
+  loginStatus = 200
+  await fillLogin()
+  await click(document.querySelector('button[type="submit"]'))
+  assert.equal(window.location.pathname, '/inventory')
+  assert.equal(window.location.search, '?page=2')
+  assert.equal(document.querySelector('h1').textContent, 'Inventory')
+})
+
+test('failed logout stays authenticated with feedback and can be retried', async () => {
+  logoutStatus = 503
+  await click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Sign out'))
+  assert.equal(window.location.pathname, '/inventory')
+  assert.match(document.querySelector('[role="alert"]').textContent, /Sign-out failed/)
+  logoutStatus = 200
+  await click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Sign out'))
+  assert.equal(window.location.pathname, '/login')
+})
+
+test('login blocks duplicate submissions and rejects an external return destination', async () => {
+  await act(async () => {
+    window.history.pushState({ usr: { from: '//external.example.test' } }, '', '/login')
+    window.dispatchEvent(new window.PopStateEvent('popstate'))
+  })
+  let resolve
+  pendingLogin = { promise: new Promise((done) => { resolve = done }) }
+  await fillLogin()
+  const calls = loginCalls
+  await click(document.querySelector('button[type="submit"]'))
+  assert.equal(document.querySelector('button[type="submit"]').disabled, true)
+  assert.equal(document.querySelector('button[type="submit"]').getAttribute('aria-busy'), 'true')
+  await click(document.querySelector('button[type="submit"]'))
+  assert.equal(loginCalls, calls + 1)
+  await act(async () => { resolve(response({ success: true, message: 'OK', data: { user: account, token: 'test-token' } })) })
+  pendingLogin = null
+  assert.equal(window.location.pathname, '/dashboard')
+  assert.equal(window.location.origin, 'http://localhost')
 })

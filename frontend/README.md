@@ -4,11 +4,11 @@ Separate React + TypeScript + Vite application for the Laravel API in `../backen
 
 ## Current step
 
-Step 4 (Checkpoint 05) adds the shared API client: base URL configuration, JSON
-requests, bearer-token support, full response envelopes, normalized errors,
-cancellation, and timeouts. No new runtime dependencies are needed.
-The existing layout and module previews are unchanged; connecting login and
-business screens remains work for the following checkpoints.
+Step 5 (Checkpoint 06) connects login, session restoration, protected routes, the
+real account/role display, and sign-out to Laravel. Sessions persist in sessionStorage
+and are validated with `/auth/me` after refresh. No new dependencies are needed.
+Business modules remain previews; role-aware navigation and actions follow in
+the next checkpoint. Backend policies remain the security boundary.
 
 ## Run locally
 
@@ -24,7 +24,8 @@ npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 Stop any running frontend server before `npm ci`: Windows locks Vite's native
 build library while the server is running, which prevents a clean reinstall.
 
-Open http://127.0.0.1:5173. Expect a redirect to `/dashboard` with the shared layout.
+Open http://127.0.0.1:5173. Without a valid session, expect the login page.
+Configure the API URL below and run Laravel before signing in with an existing account.
 Use Ctrl+C to stop the server. Edit `src/App.tsx` to see Vite update the page.
 
 ## Quality checks
@@ -40,13 +41,19 @@ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
 Preview serves the production build at http://127.0.0.1:4173. It is a local check,
 not a production hosting server. Build output is in `dist/` and is ignored by Git.
 `npm test` runs the Node test runner with jsdom and Vite's TypeScript transform.
-The nine navigation integration tests cover the root redirect, module routes, active links,
+The 16 navigation/login integration tests cover the root redirect, module routes, active links,
 document titles, focus/scroll behavior, mobile menu dismissal, history navigation,
 path variants, component-preview validation, and 404 recovery. These DOM simulations
 do not verify visual appearance, CSS breakpoints, or real browser layout.
+They also exercise login validation, password visibility, duplicate-submit blocking,
+return links, logout, and logout failure feedback with mocked HTTP responses.
 The 26 API-client tests cover URL configuration, request serialization, token
 selection, response envelopes, HTTP errors, cancellation, timeout, and real fetch
 transport against a temporary local test server. They do not use business data.
+The 15 auth-store tests cover session restoration, token persistence, response
+validation, all four roles, expiry, failed requests, and stale-response races.
+Total: 57 frontend tests. Test Vite servers disable WebSockets/file watching and
+use separate caches to avoid colliding with one another or the development server.
 
 The scripts invoke each installed tool through Node directly. This avoids npm's
 Windows `.cmd` wrappers, whose unquoted path assignment fails on the `&` in this
@@ -59,7 +66,7 @@ workspace name. These relative Node commands also work on Linux and in Docker.
 - `src/App.tsx`: declares routes nested inside the shared layout.
 - `src/components/layout/AppLayout.tsx`: sidebar/content structure, skip link, route focus and title updates.
 - `src/components/layout/Sidebar.tsx`: shared navigation links and brand.
-- `src/components/layout/Topbar.tsx`: account placeholder, page context, and mobile navigation.
+- `src/components/layout/Topbar.tsx`: authenticated account, sign-out, page context, and mobile navigation.
 - `src/lib/navigation.ts`: one navigation list for desktop/mobile links and module placeholders.
 - `src/pages/WorkspacePages.tsx`: dashboard preview, module preview, and recoverable 404.
 - `src/index.css`: Tailwind import, shared theme variables, and base styles.
@@ -79,9 +86,15 @@ workspace name. These relative Node commands also work on Linux and in Docker.
 - `src/lib/api/config.ts`: validates and normalizes the API base URL.
 - `src/lib/api/client.ts`: reusable request transport and cancellation handling.
 - `src/lib/api/error.ts`: stable error categories, display messages, and field errors.
-- `src/lib/api/index.ts`: configured client for future endpoint modules.
+- `src/lib/api/index.ts`: shared auth store and its authenticated API client.
 - `src/types/api.ts`: resource, message, and pagination envelope types.
 - `tests/api-client.test.mjs`: client contract and transport tests.
+- `src/features/auth/auth-api.ts`: login/me/logout calls and runtime account-response validation.
+- `src/features/auth/auth-store.ts`: session state, persistence, restoration, and stale-request protection.
+- `src/features/auth/use-auth.ts`: React subscription to the shared auth store.
+- `src/features/auth/AuthGate.tsx`: loading/error boundaries, route protection, and internal return links.
+- `src/features/auth/LoginPage.tsx`: accessible two-field login form and validation feedback.
+- `tests/auth-store.test.mjs`: authentication lifecycle and concurrency tests.
 
 Consult `../BACKEND_API_CONTRACT.md` before implementing API clients. Role responses
 and conflict handling are available; pending-stock retry, delivery lookup/ownership,
@@ -114,8 +127,8 @@ separate PostCSS setup is needed.
 3. Use Back/Forward, reload `/inventory`, and visit an unknown path. Expect the
    correct page or a 404 with a working link back to the dashboard.
 4. Tab from the address bar and use Skip to content; confirm visible focus.
-5. Confirm the account area says Not signed in / Role unavailable and Sign out
-   is disabled. Authentication will provide the real profile, role, and logout action.
+5. Confirm the account area shows the actual signed-in name and role. Sign out
+   and verify the login page replaces the workspace, including when pressing Back.
 6. Visit `/design-system`. Check button feedback, disabled/loading controls, empty
    Display name validation with input focus, and valid submission feedback.
 7. At mobile width and 200% browser zoom, check wrapping and no horizontal scrolling.
@@ -133,8 +146,10 @@ provides active-link semantics. See the [official routing guide](https://reactro
 Routes: `/dashboard`, `/orders`, `/fulfillment`, `/delivery`, `/products`,
 `/categories`, `/inventory`, `/customers`, `/suppliers`, and `/design-system`.
 `/` redirects to `/dashboard`; unknown paths show the 404 page. The design-system
-route is intentionally available in this checkpoint's preview build; revisit its
-visibility before production. There are no protected routes or API requests yet.
+route is intentionally available behind authentication in this checkpoint's preview
+build; revisit its visibility before production. `/login` is public. All workspace
+routes are protected, including the component catalog and the 404 page. Signed-in
+users visiting `/login` return to a safe internal destination or `/dashboard`.
 
 Vite handles deep links locally. At the hosting checkpoint, configure the frontend
 server to fall back to `index.html` for application paths so refresh/direct links
@@ -168,8 +183,8 @@ Set-Location -LiteralPath '.\backend'
 php artisan serve --host=127.0.0.1 --port=8000 --no-interaction
 ```
 
-The browser-facing screens do not call this client yet. A future endpoint module
-can use it as follows (this example is not an automatic request on page load):
+Authentication uses this client now. A future endpoint module can use it as follows
+(this health example is not an automatic request on page load):
 
 ```typescript
 import { api } from '../lib/api'
@@ -192,12 +207,12 @@ does not perform runtime domain-schema validation; add schemas with each feature
 For a 204 response, use `request<void>`; existing delete endpoints instead return
 a JSON message envelope with `data: null`.
 
-Authentication will configure `createApiClient({ baseUrl, getAccessToken })` with
-a reader for the current session token. The reader runs for each request. Public
-requests use `auth: false`. The client neither stores tokens nor redirects users;
-the authentication feature will own persistence and handling of `unauthenticated`
-errors, including clearing an invalid current session. Cookie credentials are
-omitted because the existing backend uses Sanctum bearer tokens.
+The auth store configures `createApiClient({ baseUrl, getAccessToken, onUnauthorized })`.
+The token reader runs for each request. Public requests use `auth: false`. The
+transport delegates a protected 401 to the auth store with the request's token;
+only a matching current token is cleared. Old requests cannot erase a newer login.
+The auth store owns persistence and route guards own redirects. Cookie credentials
+are omitted because the existing backend uses Sanctum bearer tokens.
 
 The transport has a 15-second timeout (including response-body reading), accepts
 an `AbortSignal`, and never retries requests automatically. A timed-out or interrupted
@@ -210,7 +225,7 @@ Catch `ApiError` and use `kind`, `status`, `message`, and `fieldErrors`:
 | --- | --- |
 | `validation` (422) | Map field errors to the form, preserving keys such as `items.0.quantity`. |
 | `conflict` (409) | Show the deliberate business message and refresh the affected record as appropriate. |
-| `unauthenticated` (401) | Let the authentication feature require a valid session. |
+| `unauthenticated` (401) | The shared store clears the matching current session; route guards require login. |
 | `forbidden` / `not_found` | Show permission or missing-record feedback. |
 | `rate_limited` / `server` / `http` | Show the normalized message; do not automatically repeat writes. |
 | `network` / `timeout` | Explain the connection issue; verify writes before retrying. |
@@ -224,5 +239,50 @@ render these as text. Success remains based on HTTP status: an order returned wi
 `PENDING_STOCK` at HTTP 200 is a business outcome, not an HTTP error. No workflow
 transition rules are duplicated in the client.
 
+## Authentication behavior and review
+
+Persistence uses sessionStorage, selected for the existing bearer-token backend.
+Only the token is stored, under a key scoped to the API base URL; passwords and
+user profiles are never persisted. `/auth/me` supplies fresh account data after
+reload, and all auth responses validate the account shape and the exact backend
+roles before accepting a session. The two-field login form uses native inputs
+and local React state; more complex feature forms can introduce React Hook Form.
+
+sessionStorage survives reloads and normally ends with the tab's browsing session.
+It remains accessible to JavaScript and is not an HttpOnly cookie. A newly opened
+tab may inherit a copy from its opener; it is not a cross-tab logout mechanism.
+See [MDN's sessionStorage reference](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage).
+An HttpOnly session would require a deliberate backend/session/CSRF/CORS change.
+There is no refresh-token endpoint or configured bearer expiry in the current
+backend contract. Closing a tab removes browser persistence, not the server token.
+
+- Restoring: keep workspace content hidden until `/auth/me` succeeds.
+- Expired/invalid token: clear the current session and require login.
+- Network/server failure during restoration: preserve the token and show Retry;
+  local sign-out is available, clearly stating that the server token was not revoked.
+- Normal sign-out: call `/auth/logout` before clearing local state. A failure keeps
+  the session and displays an error so the user can retry. A 401 clears it.
+- Storage blocked: continue in memory and show a notice that refresh persistence
+  is unavailable. No localStorage fallback is used.
+- Return URLs: retain only safe internal paths; no external post-login redirect.
+- Duplicate login/logout attempts share the pending request. Late restoration or
+  old-token 401 responses cannot overwrite the newer session.
+
+Manual review with an existing backend account (test-suite users are temporary,
+not accounts to use in the application):
+
+1. Run Laravel on port 8000 and Vite on port 5173; restart Vite after setting `.env.local`.
+2. Open `/inventory` while signed out: expect login, with no workspace flash.
+3. Submit empty fields or invalid credentials: expect visible errors and focus on
+   the first invalid field. Check password visibility and disabled submit while pending.
+4. Sign in: expect return to `/inventory` and your actual name/role in the top bar.
+5. Refresh: expect a brief session check, then the same protected page.
+6. Stop Laravel and refresh: expect verification failure with Retry, not a fake
+   signed-in state. Restart Laravel and Retry: expect the session to restore.
+7. Sign out: expect `/login`; Back must not reveal protected content. Sign in again
+   to verify that login remains usable after logout.
+8. Review login at mobile width and 200% zoom, keyboard focus, and password-manager
+   autofill. Real browser interaction and CORS still need this manual check.
+
 Commits are manual. Suggested message for this step:
-`feat: add shared API client and contract-aware error handling`
+`feat: add authentication and protected workspace routes`

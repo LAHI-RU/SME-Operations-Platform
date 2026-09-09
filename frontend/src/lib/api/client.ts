@@ -16,6 +16,7 @@ export interface ApiClientOptions {
   baseUrl: string
   timeoutMs?: number
   getAccessToken?: () => string | null
+  onUnauthorized?: (requestToken: string) => void
   fetch?: typeof globalThis.fetch
 }
 
@@ -43,14 +44,15 @@ export function createApiClient(options: ApiClientOptions) {
     const url = `${baseUrl}${path}${query.size ? `?${query}` : ''}`
     const headers = new Headers({ Accept: 'application/json' })
     let body: string | undefined
+    let requestToken: string | null = null
     try {
       if (requestOptions.body !== undefined) {
         body = JSON.stringify(requestOptions.body)
         if (body === undefined) throw new Error('Not JSON')
         headers.set('Content-Type', 'application/json')
       }
-      const token = requestOptions.auth === false ? null : options.getAccessToken?.()
-      if (token) headers.set('Authorization', `Bearer ${token}`)
+      requestToken = requestOptions.auth === false ? null : options.getAccessToken?.() ?? null
+      if (requestToken) headers.set('Authorization', `Bearer ${requestToken}`)
     } catch {
       throw new ApiError('configuration', 'The request body or authentication configuration is invalid.')
     }
@@ -68,6 +70,7 @@ export function createApiClient(options: ApiClientOptions) {
         credentials: 'omit', cache: 'no-store', redirect: 'error',
       })
       status = response.status
+      if (status === 401 && requestToken) options.onUnauthorized?.(requestToken)
       if (response.status === 204) return undefined as T
       const text = await response.text()
       controller.signal.throwIfAborted()

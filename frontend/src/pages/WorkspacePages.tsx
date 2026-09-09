@@ -16,7 +16,7 @@ export function DashboardPreview() {
       <Card aria-labelledby="overview-heading" className="border-brand/20 bg-brand-soft">
         <Compass aria-hidden="true" className="mb-4 size-8 text-brand" />
         <h2 id="overview-heading" className="text-xl font-semibold">Your workspace is taking shape</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted">Live summaries will appear once your account and business data are connected. For now, use the navigation to explore each area.</p>
+        <p className="mt-2 max-w-2xl text-sm text-muted">Live summaries will appear once business data is connected. For now, use the navigation to explore each area.</p>
       </Card>
       <section aria-labelledby="explore-heading">
         <h2 id="explore-heading" className="mb-4 font-semibold">Explore operations</h2>

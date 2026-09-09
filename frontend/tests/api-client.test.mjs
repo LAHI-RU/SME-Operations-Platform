@@ -12,7 +12,7 @@ const json = (payload, status = 200) => new Response(JSON.stringify(payload), { 
 const fixture = (fetch, options = {}) => createApiClient({ baseUrl, fetch, ...options })
 
 before(async () => {
-  vite = await createServer({ server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' })
+  vite = await createServer({ cacheDir: 'node_modules/.vite-test-api', server: { middlewareMode: true, hmr: false, ws: false, watch: null }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' })
   ;({ createApiClient } = await vite.ssrLoadModule('/src/lib/api/client.ts'))
   ;({ ApiError } = await vite.ssrLoadModule('/src/lib/api/error.ts'))
   ;({ normalizeApiBaseUrl } = await vite.ssrLoadModule('/src/lib/api/config.ts'))
