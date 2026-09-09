@@ -2,15 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-test('a user can log in', function () {
+test('a user can log in', function (UserRole $role): void {
     $user = User::factory()->create([
         'email' => 'lahiru@example.com',
         'password' => bcrypt('password123'),
+        'role' => $role,
     ]);
 
     $response = $this->postJson('/api/v1/auth/login', [
@@ -22,12 +24,16 @@ test('a user can log in', function () {
         ->assertSuccessful()
         ->assertJsonPath('success', true)
         ->assertJsonPath('data.user.email', 'lahiru@example.com')
+        ->assertJsonPath('data.user.role', $user->refresh()->role->value)
         ->assertJsonStructure([
             'data' => [
                 'token',
             ],
         ]);
-});
+})->with([
+    'admin' => [UserRole::ADMIN],
+    'sales' => [UserRole::SALES],
+]);
 
 test('login fails with invalid credentials', function () {
     $user = User::factory()->create([
@@ -45,8 +51,10 @@ test('login fails with invalid credentials', function () {
         ->assertJsonValidationErrors(['email']);
 });
 
-test('an authenticated user can view their profile', function () {
-    $user = User::factory()->create();
+test('an authenticated user can view their profile', function (UserRole $role): void {
+    $user = User::factory()->create([
+        'role' => $role,
+    ]);
 
     $response = $this
         ->actingAs($user, 'sanctum')
@@ -55,8 +63,12 @@ test('an authenticated user can view their profile', function () {
     $response
         ->assertSuccessful()
         ->assertJsonPath('data.id', $user->id)
-        ->assertJsonPath('data.email', $user->email);
-});
+        ->assertJsonPath('data.email', $user->email)
+        ->assertJsonPath('data.role', $user->refresh()->role->value);
+})->with([
+    'admin' => [UserRole::ADMIN],
+    'sales' => [UserRole::SALES],
+]);
 
 test('an unauthenticated user cannot access orders', function () {
     $response = $this->getJson('/api/v1/orders');

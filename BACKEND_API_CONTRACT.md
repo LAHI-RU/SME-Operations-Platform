@@ -1,13 +1,14 @@
-# Backend API contract — Checkpoint 01
+# Backend API contract
 
-Inspected: 2026-09-09. Scope: discovery only; no backend behavior or frontend code changed.
-Status: source inspection and existing feature tests complete; awaiting user review.
+Inspected: 2026-09-09. Updated through sub-checkpoint 02.1: authentication responses now expose the stored role. No frontend code has been created.
+Status: 02.1 implemented and verified; remaining Checkpoint 02 changes are pending.
 
 ## Evidence and verification
 
 - Registered API routes: `php artisan route:list --path=api --no-interaction` succeeded, **39 routes**.
 - Installed packages from `composer show --direct`: Laravel **13.29.0**, Sanctum **4.3.3**, Pest **4.7.8**. CLI PHP is 8.3.14.
 - `php vendor/bin/pest --compact --testsuite=Feature`: **115 passed, 256 assertions** using SQLite `:memory:` (7.327 seconds).
+- Sub-checkpoint 02.1 verification: the four new ADMIN/SALES role assertions failed before the controller change. Afterward, `php artisan test --compact tests/Feature/AuthTest.php` passed **9 tests / 29 assertions**, and `php artisan test` passed the complete suite with **118 tests / 269 assertions**, using SQLite `:memory:`. Both `php vendor/bin/pint --dirty --format agent` and `php vendor/bin/pint --test` passed.
 - An initial Artisan test invocation forwarded `--no-interaction` to PHPUnit, which rejected it. The direct Pest invocation above corrected the command and passed.
 - Sources: `backend/routes/api.php`, all API controllers, requests, resources, models, enums, policies and services, `backend/bootstrap/app.php`, auth/Sanctum configuration, and existing feature tests.
 - Framework response details were checked against the installed `ResourceResponse`, `PaginatedResourceResponse`, `LengthAwarePaginator`, and exception handler source.
@@ -20,15 +21,15 @@ All domain endpoints require `auth:sanctum`. Public endpoints are login and heal
 | Method and full path | Request | Success response |
 | --- | --- | --- |
 | `GET /api/v1/health` | None | `200`, `{success:true,message:"API is healthy.",data:{application,environment}}` |
-| `POST /api/v1/auth/login` | Required `email` (email format), `password` (string) | `200`, `{success:true,message:"Login successful.",data:{user:{id,name,email},token}}` |
-| `GET /api/v1/auth/me` | Bearer token | `200`, `{success:true,message:"Authenticated user.",data:{id,name,email}}` |
+| `POST /api/v1/auth/login` | Required `email` (email format), `password` (string) | `200`, `{success:true,message:"Login successful.",data:{user:{id,name,email,role},token}}` |
+| `GET /api/v1/auth/me` | Bearer token | `200`, `{success:true,message:"Authenticated user.",data:{id,name,email,role}}` |
 | `POST /api/v1/auth/logout` | Bearer token; no body | `200`, `{success:true,message:"Logout successful.",data:null}` |
 
 Login creates a Sanctum personal access token named `react-client`. Subsequent requests use `Authorization: Bearer <token>` and should send `Accept: application/json`. JSON writes use `Content-Type: application/json`. Logout deletes the current access token, not all tokens. No token refresh endpoint exists. Sanctum's source configuration sets expiration to `null`, and login does not supply a per-token expiry.
 
 Invalid credentials return **422**, with an `email` validation error: `The provided credentials are incorrect.` Missing/invalid authentication returns **401**.
 
-**Neither login nor `/auth/me` returns `role`.** The user model has a role enum, but the controller explicitly selects only id, name and email. A frontend cannot safely discover the current user's role from these responses. Do not invent a role or try to decode it from the opaque token.
+**Login returns `data.user.role`; `/auth/me` returns `data.role`.** Both serialize `$user->role->value` from the existing `UserRole` enum: `ADMIN`, `SALES`, `WAREHOUSE`, or `DELIVERY`. HTTP tests cover ADMIN and SALES against the persisted user's role. Token creation, authentication, logout, and response envelopes are unchanged. The frontend may use this field for navigation and action visibility; backend policies remain authoritative. Do not infer roles from the opaque token.
 
 The current login flow does not establish a browser session; `statefulApi()` is not enabled in `bootstrap/app.php`. There is no application CORS override; installed framework defaults allow all origins/methods/headers for API paths with `supports_credentials:false`. Browser behavior still needs actual verification.
 
@@ -237,7 +238,6 @@ These are findings and recommendations, not implemented changes.
 
 | Problem | Frontend/product impact | Smallest recommended direction |
 | --- | --- | --- |
-| Missing role in login/me | Role-aware navigation cannot determine permissions | Add serialized role to both auth responses, with response tests, before authorization UI |
 | Business exceptions return 500 | Users cannot distinguish a state conflict from a server fault | Map specific domain exceptions to consistent 409 responses; test HTTP failures |
 | PENDING_STOCK confirmation cannot retry | Replenished orders remain blocked | Align confirmation with the intended retry transition while preserving atomic stock checks and deductions |
 | Delivery ownership and assignee role unchecked | Assignment-only delivery UX has no matching backend boundary | Validate DELIVERY assignees, enforce ownership for drivers with ADMIN override, and scope reads if required |
@@ -261,6 +261,6 @@ php artisan route:list --path=api --no-interaction
 php artisan test --compact
 ```
 
-Expected: 39 registered API routes and a passing complete test suite. The existing `phpunit.xml` selects SQLite `:memory:`; the feature-only run is verified above, while the requested full-suite run remains for user confirmation. Do not pass `--no-interaction` after the Artisan `test` command because the test runner receives it.
+Expected: 39 registered API routes and a passing complete test suite (118 tests / 269 assertions after 02.1). The existing `phpunit.xml` selects SQLite `:memory:`; focused and full-suite results are verified above. Do not pass `--no-interaction` after the Artisan `test` command because the test runner receives it.
 
-Send the route count and test summary (or error output). Review the gaps above. Pause here until the user provides verified output or explicitly types `continue`; no frontend project has been created.
+Send the test summary (or error output). Sub-checkpoint 02.1 is complete; stop until the user explicitly types `continue` before starting 02.2. The remaining gaps above are unchanged; Checkpoint 02 as a whole is not yet complete.
