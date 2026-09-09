@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\FulfillmentStatus;
 use App\Enums\OrderStatus;
+use App\Enums\UserRole;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Inventory;
@@ -177,4 +178,154 @@ test('completed fulfillment cannot be completed again', function () {
         RuntimeException::class,
         'Only orders currently being packed can complete fulfillment.'
     );
+});
+
+test('a warehouse user can start fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $data['user']->update([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/start",
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot start fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $data['user']->update([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/start",
+    );
+
+    $response->assertForbidden();
+});
+
+test('a warehouse user can complete fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $data['user']->update([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    app(FulfillmentService::class)->start(
+        salesOrder: $data['order'],
+        packedBy: $data['user']->id,
+    );
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/complete",
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot complete fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $data['user']->update([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    app(FulfillmentService::class)->start(
+        salesOrder: $data['order'],
+        packedBy: $data['user']->id,
+    );
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/complete",
+    );
+
+    $response->assertForbidden();
+});
+
+test('an authenticated user can start fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/start",
+    );
+
+    $response
+        ->assertSuccessful()
+        ->assertJsonPath('data.status', 'IN_PROGRESS');
+
+    expect($data['order']->refresh()->status)->toBe(
+        OrderStatus::PACKING
+    );
+});
+
+test('an unauthenticated user cannot start fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/start",
+    );
+
+    $response->assertUnauthorized();
+});
+
+test('an authenticated user can complete fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    app(FulfillmentService::class)->start(
+        salesOrder: $data['order'],
+        packedBy: $data['user']->id,
+    );
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/complete",
+        [
+            'notes' => 'All items packed successfully.',
+        ],
+    );
+
+    $response
+        ->assertSuccessful()
+        ->assertJsonPath('data.status', 'COMPLETED')
+        ->assertJsonPath(
+            'data.notes',
+            'All items packed successfully.'
+        );
+
+    expect($data['order']->refresh()->status)->toBe(
+        OrderStatus::READY_FOR_DELIVERY
+    );
+});
+
+test('an unauthenticated user cannot complete fulfillment through the API', function () {
+    $data = createConfirmedOrderForFulfillmentTest();
+
+    app(FulfillmentService::class)->start(
+        salesOrder: $data['order'],
+        packedBy: $data['user']->id,
+    );
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/fulfillment/complete",
+        [
+            'notes' => 'All items packed successfully.',
+        ],
+    );
+
+    $response->assertUnauthorized();
 });

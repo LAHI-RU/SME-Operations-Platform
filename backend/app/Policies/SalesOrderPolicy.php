@@ -105,4 +105,32 @@ class SalesOrderPolicy
     ): bool {
         return true;
     }
+
+    public function startFulfillment(
+        User $user,
+        SalesOrder $salesOrder,
+    ): bool {
+        return in_array(
+            $user->role,
+            [
+                UserRole::ADMIN,
+                UserRole::WAREHOUSE,
+            ],
+            true,
+        );
+    }
+
+    public function completeFulfillment(
+        User $user,
+        SalesOrder $salesOrder,
+    ): bool {
+        return in_array(
+            $user->role,
+            [
+                UserRole::ADMIN,
+                UserRole::WAREHOUSE,
+            ],
+            true,
+        );
+    }
 }

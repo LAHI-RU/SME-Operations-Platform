@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DeliveryController;
+use App\Http\Controllers\Api\V1\FulfillmentController;
 use App\Http\Controllers\Api\V1\InventoryController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SalesOrderController;
@@ -99,6 +100,16 @@ Route::prefix('v1')->group(function (): void {
         Route::get(
             'orders/{salesOrder}/delivery',
             [DeliveryController::class, 'show'],
+        );
+
+        Route::post(
+            'orders/{salesOrder}/fulfillment/start',
+            [FulfillmentController::class, 'start'],
+        );
+
+        Route::post(
+            'orders/{salesOrder}/fulfillment/complete',
+            [FulfillmentController::class, 'complete'],
         );
     });
 });
