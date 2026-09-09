@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Exceptions\InsufficientStockException;
 use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
+use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -174,4 +176,94 @@ test('failed stock removal does not create a sale transaction', function () {
         ->count();
 
     expect($saleTransactions)->toBe(0);
+});
+
+test('a warehouse user can add stock through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $product = Product::factory()->create();
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/inventory/{$product->id}/stock-in",
+        [
+            'quantity' => 10,
+            'type' => 'PURCHASE',
+        ],
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot add stock through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $product = Product::factory()->create();
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/inventory/{$product->id}/stock-in",
+        [
+            'quantity' => 10,
+            'type' => 'PURCHASE',
+        ],
+    );
+
+    $response->assertForbidden();
+});
+
+test('a warehouse user can remove stock through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $product = Product::factory()->create();
+
+    Inventory::query()->create([
+        'product_id' => $product->id,
+        'quantity' => 20,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/inventory/{$product->id}/stock-out",
+        [
+            'quantity' => 5,
+            'type' => 'ADJUSTMENT_OUT',
+        ],
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot remove stock through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $product = Product::factory()->create();
+
+    Inventory::query()->create([
+        'product_id' => $product->id,
+        'quantity' => 20,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/inventory/{$product->id}/stock-out",
+        [
+            'quantity' => 5,
+            'type' => 'ADJUSTMENT_OUT',
+        ],
+    );
+
+    $response->assertForbidden();
 });

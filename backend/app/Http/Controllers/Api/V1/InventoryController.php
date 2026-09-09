@@ -13,6 +13,7 @@ use App\Models\Inventory;
 use App\Models\Product;
 use App\Services\InventoryService;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 
 class InventoryController extends Controller
 {
@@ -21,11 +22,16 @@ class InventoryController extends Controller
         $inventory = Inventory::query()
             ->where('product_id', $product->id)
             ->with('product')
-            ->firstOrCreate([
-                'product_id' => $product->id,
-            ], [
-                'quantity' => 0,
-            ]);
+            ->firstOrCreate(
+                [
+                    'product_id' => $product->id,
+                ],
+                [
+                    'quantity' => 0,
+                ],
+            );
+
+        Gate::authorize('view', $inventory);
 
         return new InventoryResource($inventory);
     }
@@ -35,6 +41,17 @@ class InventoryController extends Controller
         Product $product,
         InventoryService $inventoryService,
     ): InventoryResource {
+        $inventory = Inventory::query()->firstOrCreate(
+            [
+                'product_id' => $product->id,
+            ],
+            [
+                'quantity' => 0,
+            ],
+        );
+
+        Gate::authorize('stockIn', $inventory);
+
         $data = $request->validated();
 
         $inventory = $inventoryService->addStock(
@@ -58,6 +75,17 @@ class InventoryController extends Controller
         Product $product,
         InventoryService $inventoryService,
     ): InventoryResource {
+        $inventory = Inventory::query()->firstOrCreate(
+            [
+                'product_id' => $product->id,
+            ],
+            [
+                'quantity' => 0,
+            ],
+        );
+
+        Gate::authorize('stockOut', $inventory);
+
         $data = $request->validated();
 
         $inventory = $inventoryService->removeStock(
@@ -79,6 +107,19 @@ class InventoryController extends Controller
     public function transactions(
         Product $product,
     ): AnonymousResourceCollection {
+        $inventory = Inventory::query()
+            ->where('product_id', $product->id)
+            ->firstOrCreate(
+                [
+                    'product_id' => $product->id,
+                ],
+                [
+                    'quantity' => 0,
+                ],
+            );
+
+        Gate::authorize('transactions', $inventory);
+
         $transactions = $product->inventoryTransactions()
             ->latest('id')
             ->paginate(15);
