@@ -1,0 +1,38 @@
+﻿.welcome {
+  width: min(100% - 2rem, 44rem);
+  margin: clamp(3rem, 12vh, 8rem) auto;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  border: 1px solid #dce3e8;
+  border-radius: 1rem;
+  background: #ffffff;
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #16665d;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.description {
+  margin: 1.25rem 0 0;
+  color: #526174;
+  font-size: 1.125rem;
+}
+
+.setup-note {
+  margin: 2rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dce3e8;
+  color: #526174;
+  font-size: 0.875rem;
+}
