@@ -12,6 +12,7 @@ use App\Models\SalesOrder;
 use App\Services\SalesOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class SalesOrderController extends Controller
 {
@@ -37,7 +38,11 @@ class SalesOrderController extends Controller
                 function ($query, $search): void {
                     $query->where(function ($query) use ($search): void {
                         $query
-                            ->where('order_number', 'ilike', "%{$search}%")
+                            ->where(
+                                'order_number',
+                                'ilike',
+                                "%{$search}%"
+                            )
                             ->orWhereHas(
                                 'customer',
                                 fn ($customerQuery) => $customerQuery->where(
@@ -59,6 +64,8 @@ class SalesOrderController extends Controller
         StoreSalesOrderRequest $request,
         SalesOrderService $salesOrderService,
     ): SalesOrderResource {
+        Gate::authorize('create', SalesOrder::class);
+
         $data = $request->validated();
 
         $order = $salesOrderService->createDraft(
@@ -73,6 +80,8 @@ class SalesOrderController extends Controller
 
     public function show(SalesOrder $salesOrder): SalesOrderResource
     {
+        Gate::authorize('view', $salesOrder);
+
         return new SalesOrderResource(
             $salesOrder->load('customer', 'items.product')
         );
@@ -82,6 +91,8 @@ class SalesOrderController extends Controller
         SalesOrder $salesOrder,
         SalesOrderService $salesOrderService,
     ): SalesOrderResource {
+        Gate::authorize('submit', $salesOrder);
+
         $order = $salesOrderService->submit($salesOrder);
 
         return new SalesOrderResource(
@@ -94,6 +105,8 @@ class SalesOrderController extends Controller
         SalesOrderService $salesOrderService,
         Request $request,
     ): SalesOrderResource|JsonResponse {
+        Gate::authorize('confirm', $salesOrder);
+
         try {
             $order = $salesOrderService->confirm(
                 salesOrder: $salesOrder,

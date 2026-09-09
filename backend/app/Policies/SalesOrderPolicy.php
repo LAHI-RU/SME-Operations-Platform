@@ -58,4 +58,51 @@ class SalesOrderPolicy
     ): bool {
         return true;
     }
+
+    public function create(User $user): bool
+    {
+        return in_array(
+            $user->role,
+            [
+                UserRole::ADMIN,
+                UserRole::SALES,
+            ],
+            true,
+        );
+    }
+
+    public function submit(
+        User $user,
+        SalesOrder $salesOrder,
+    ): bool {
+        return in_array(
+            $user->role,
+            [
+                UserRole::ADMIN,
+                UserRole::SALES,
+            ],
+            true,
+        );
+    }
+
+    public function confirm(
+        User $user,
+        SalesOrder $salesOrder,
+    ): bool {
+        return in_array(
+            $user->role,
+            [
+                UserRole::ADMIN,
+                UserRole::WAREHOUSE,
+            ],
+            true,
+        );
+    }
+
+    public function view(
+        User $user,
+        SalesOrder $salesOrder,
+    ): bool {
+        return true;
+    }
 }

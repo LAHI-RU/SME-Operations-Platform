@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\OrderStatus;
+use App\Enums\UserRole;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Inventory;
@@ -13,6 +14,42 @@ use App\Services\SalesOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+function createSalesOrderAuthorizationTestData(): array
+{
+    $user = User::factory()->create();
+
+    $customer = Customer::factory()->create();
+
+    $category = Category::factory()->create();
+
+    $product = Product::factory()->create([
+        'category_id' => $category->id,
+    ]);
+
+    Inventory::query()->create([
+        'product_id' => $product->id,
+        'quantity' => 20,
+    ]);
+
+    $order = app(SalesOrderService::class)->createDraft(
+        customerId: $customer->id,
+        createdBy: $user->id,
+        items: [
+            [
+                'product_id' => $product->id,
+                'quantity' => 2,
+            ],
+        ],
+    );
+
+    return [
+        'user' => $user,
+        'customer' => $customer,
+        'product' => $product,
+        'order' => $order,
+    ];
+}
 
 function createProductWithStockForOrderTest(
     int $stock,
@@ -361,4 +398,118 @@ test('an authenticated user can confirm an order through the API', function () {
         'product_id' => $product->id,
         'quantity' => 15,
     ]);
+});
+
+test('a sales user can create an order through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $customer = Customer::factory()->create();
+
+    $product = Product::factory()->create();
+
+    Inventory::query()->create([
+        'product_id' => $product->id,
+        'quantity' => 10,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson('/api/v1/orders', [
+        'customer_id' => $customer->id,
+        'items' => [
+            [
+                'product_id' => $product->id,
+                'quantity' => 2,
+            ],
+        ],
+    ]);
+
+    $response->assertSuccessful();
+});
+
+test('a warehouse user cannot create an order through the API', function () {
+    $user = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $customer = Customer::factory()->create();
+
+    $product = Product::factory()->create();
+
+    Inventory::query()->create([
+        'product_id' => $product->id,
+        'quantity' => 10,
+    ]);
+
+    $this->actingAs($user, 'sanctum');
+
+    $response = $this->postJson('/api/v1/orders', [
+        'customer_id' => $customer->id,
+        'items' => [
+            [
+                'product_id' => $product->id,
+                'quantity' => 2,
+            ],
+        ],
+    ]);
+
+    $response->assertForbidden();
+});
+
+test('a sales user can submit an order through the API', function () {
+    $data = createSalesOrderAuthorizationTestData();
+
+    $data['order']->update([
+        'created_by' => $data['user']->id,
+    ]);
+
+    $data['user']->update([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/submit",
+    );
+
+    $response->assertSuccessful();
+});
+
+test('a sales user cannot confirm an order through the API', function () {
+    $data = createSalesOrderAuthorizationTestData();
+
+    app(SalesOrderService::class)->submit($data['order']);
+
+    $data['user']->update([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/confirm",
+    );
+
+    $response->assertForbidden();
+});
+
+test('a warehouse user can confirm an order through the API', function () {
+    $data = createSalesOrderAuthorizationTestData();
+
+    app(SalesOrderService::class)->submit($data['order']);
+
+    $data['user']->update([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $this->actingAs($data['user'], 'sanctum');
+
+    $response = $this->postJson(
+        "/api/v1/orders/{$data['order']->id}/confirm",
+    );
+
+    $response->assertSuccessful();
 });
