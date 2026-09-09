@@ -1,7 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { ArrowRight, Layers, MousePointer2, Palette, Type } from 'lucide-react'
+import { ArrowRight, MousePointer2, Palette, Type } from 'lucide-react'
 import { StatusBadge } from '../components/status/StatusBadge'
-import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -37,18 +36,6 @@ export function DesignSystemPreview() {
 
   return (
     <>
-      <a href="#main" className="sr-only z-10 rounded-lg bg-brand p-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-brand text-white"><Layers aria-hidden="true" className="size-5" /></span>
-            <div><p className="font-bold tracking-tight">SME Operations</p><p className="text-xs text-muted">Order fulfillment &amp; inventory</p></div>
-          </div>
-          <Badge>Component preview</Badge>
-        </div>
-      </header>
-
-      <main id="main" tabIndex={-1} className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="mb-8 max-w-2xl">
           <p className="mb-3 text-xs font-bold tracking-widest text-brand uppercase">Foundation / Design system</p>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">A consistent operations workspace.</h1>
@@ -125,7 +112,6 @@ export function DesignSystemPreview() {
         </Card>
 
         <footer className="flex flex-wrap justify-between gap-2 pb-4 text-xs text-muted"><p>UI foundation · Tailwind CSS + reusable React components</p><p>Local component preview · No business data</p></footer>
-      </main>
     </>
   )
 }
