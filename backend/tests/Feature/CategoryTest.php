@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -105,4 +106,40 @@ test('a category with products cannot be deleted', function () {
     $this->assertDatabaseHas('categories', [
         'id' => $category->id,
     ]);
+});
+
+it('allows an admin to create a category', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::ADMIN,
+    ]);
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson('/api/v1/categories', [
+            'name' => 'Electronics',
+        ])
+        ->assertCreated();
+});
+
+it('prevents a sales user from creating a category', function () {
+    $sales = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($sales, 'sanctum')
+        ->postJson('/api/v1/categories', [
+            'name' => 'Electronics',
+        ])
+        ->assertForbidden();
+});
+
+it('prevents a warehouse user from deleting a category', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $category = Category::factory()->create();
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->deleteJson("/api/v1/categories/{$category->id}")
+        ->assertForbidden();
 });

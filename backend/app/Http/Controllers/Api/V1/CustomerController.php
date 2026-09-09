@@ -11,11 +11,14 @@ use App\Http\Resources\Api\V1\CustomerResource;
 use App\Models\Customer;
 use App\Services\CustomerCodeService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class CustomerController extends Controller
 {
     public function index()
     {
+        Gate::authorize('viewAny', Customer::class);
+
         $customers = Customer::query()
             ->latest('id')
             ->paginate(15);
@@ -27,6 +30,8 @@ class CustomerController extends Controller
         StoreCustomerRequest $request,
         CustomerCodeService $codeService,
     ): CustomerResource {
+        Gate::authorize('create', Customer::class);
+
         $customer = Customer::query()->create([
             ...$request->validated(),
             'customer_code' => $codeService->generate(),
@@ -40,6 +45,8 @@ class CustomerController extends Controller
 
     public function show(Customer $customer): CustomerResource
     {
+        Gate::authorize('view', $customer);
+
         return new CustomerResource($customer);
     }
 
@@ -47,6 +54,8 @@ class CustomerController extends Controller
         UpdateCustomerRequest $request,
         Customer $customer,
     ): CustomerResource {
+        Gate::authorize('update', $customer);
+
         $customer->update($request->validated());
 
         return new CustomerResource(
@@ -56,6 +65,8 @@ class CustomerController extends Controller
 
     public function destroy(Customer $customer): JsonResponse
     {
+        Gate::authorize('delete', $customer);
+
         $customer->delete();
 
         return response()->json([

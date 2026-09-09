@@ -11,11 +11,14 @@ use App\Http\Resources\Api\V1\ProductResource;
 use App\Models\Inventory;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class ProductController extends Controller
 {
     public function index()
     {
+        Gate::authorize('viewAny', Product::class);
+
         $products = Product::query()
             ->with(['category', 'inventory'])
             ->latest('id')
@@ -26,6 +29,8 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request): ProductResource
     {
+        Gate::authorize('create', Product::class);
+
         $product = \DB::transaction(function () use ($request): Product {
             $product = Product::create([
                 ...$request->validated(),
@@ -47,6 +52,8 @@ class ProductController extends Controller
 
     public function show(Product $product): ProductResource
     {
+        Gate::authorize('view', $product);
+
         return new ProductResource(
             $product->load(['category', 'inventory'])
         );
@@ -56,6 +63,8 @@ class ProductController extends Controller
         UpdateProductRequest $request,
         Product $product,
     ): ProductResource {
+        Gate::authorize('update', $product);
+
         $product->update($request->validated());
 
         return new ProductResource(
@@ -65,6 +74,8 @@ class ProductController extends Controller
 
     public function destroy(Product $product): JsonResponse
     {
+        Gate::authorize('delete', $product);
+
         $product->delete();
 
         return response()->json([

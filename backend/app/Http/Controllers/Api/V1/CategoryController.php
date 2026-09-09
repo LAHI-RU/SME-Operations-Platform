@@ -10,11 +10,14 @@ use App\Http\Requests\Api\V1\UpdateCategoryRequest;
 use App\Http\Resources\Api\V1\CategoryResource;
 use App\Models\Category;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class CategoryController extends Controller
 {
     public function index()
     {
+        Gate::authorize('viewAny', Category::class);
+
         $categories = Category::query()
             ->latest('id')
             ->paginate(15);
@@ -24,6 +27,8 @@ class CategoryController extends Controller
 
     public function store(StoreCategoryRequest $request): CategoryResource
     {
+        Gate::authorize('create', Category::class);
+
         $category = Category::create([
             ...$request->validated(),
             'is_active' => true,
@@ -34,6 +39,8 @@ class CategoryController extends Controller
 
     public function show(Category $category): CategoryResource
     {
+        Gate::authorize('view', $category);
+
         return new CategoryResource($category);
     }
 
@@ -41,6 +48,8 @@ class CategoryController extends Controller
         UpdateCategoryRequest $request,
         Category $category,
     ): CategoryResource {
+        Gate::authorize('update', $category);
+
         $category->update($request->validated());
 
         return new CategoryResource($category->refresh());
@@ -48,6 +57,8 @@ class CategoryController extends Controller
 
     public function destroy(Category $category): JsonResponse
     {
+        Gate::authorize('delete', $category);
+
         if ($category->products()->exists()) {
             return response()->json([
                 'success' => false,

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -114,4 +115,58 @@ test('a supplier can be deleted', function () {
     $this->assertDatabaseMissing('suppliers', [
         'id' => $supplier->id,
     ]);
+});
+
+it('allows an admin to create a supplier', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::ADMIN,
+    ]);
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson('/api/v1/suppliers', [
+            'name' => 'Admin Supplier',
+            'phone' => '0771234501',
+            'email' => 'admin.supplier@example.com',
+        ])
+        ->assertCreated();
+});
+
+it('allows a warehouse user to create a supplier', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->postJson('/api/v1/suppliers', [
+            'name' => 'Warehouse Supplier',
+            'phone' => '0771234502',
+            'email' => 'warehouse.supplier@example.com',
+        ])
+        ->assertCreated();
+});
+
+it('prevents a sales user from creating a supplier', function () {
+    $sales = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($sales, 'sanctum')
+        ->postJson('/api/v1/suppliers', [
+            'name' => 'Sales Supplier',
+            'phone' => '0771234503',
+            'email' => 'sales.supplier@example.com',
+        ])
+        ->assertForbidden();
+});
+
+it('prevents a warehouse user from deleting a supplier', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $supplier = Supplier::factory()->create();
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->deleteJson("/api/v1/suppliers/{$supplier->id}")
+        ->assertForbidden();
 });

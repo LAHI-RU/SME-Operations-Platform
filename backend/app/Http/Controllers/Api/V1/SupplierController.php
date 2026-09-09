@@ -11,11 +11,14 @@ use App\Http\Resources\Api\V1\SupplierResource;
 use App\Models\Supplier;
 use App\Services\SupplierCodeService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 
 class SupplierController extends Controller
 {
     public function index()
     {
+        Gate::authorize('viewAny', Supplier::class);
+
         $suppliers = Supplier::query()
             ->latest('id')
             ->paginate(15);
@@ -27,6 +30,8 @@ class SupplierController extends Controller
         StoreSupplierRequest $request,
         SupplierCodeService $codeService,
     ): SupplierResource {
+        Gate::authorize('create', Supplier::class);
+
         $supplier = Supplier::query()->create([
             ...$request->validated(),
             'supplier_code' => $codeService->generate(),
@@ -40,6 +45,8 @@ class SupplierController extends Controller
 
     public function show(Supplier $supplier): SupplierResource
     {
+        Gate::authorize('view', $supplier);
+
         return new SupplierResource($supplier);
     }
 
@@ -47,6 +54,8 @@ class SupplierController extends Controller
         UpdateSupplierRequest $request,
         Supplier $supplier,
     ): SupplierResource {
+        Gate::authorize('update', $supplier);
+
         $supplier->update($request->validated());
 
         return new SupplierResource(
@@ -56,6 +65,8 @@ class SupplierController extends Controller
 
     public function destroy(Supplier $supplier): JsonResponse
     {
+        Gate::authorize('delete', $supplier);
+
         $supplier->delete();
 
         return response()->json([

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -144,4 +145,73 @@ test('a product can be deleted', function () {
     $this->assertDatabaseMissing('products', [
         'id' => $product->id,
     ]);
+});
+
+it('allows an admin to create a product', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::ADMIN,
+    ]);
+
+    $category = Category::factory()->create();
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'name' => 'Test Product',
+            'sku' => 'SKU-ADMIN-001',
+            'category_id' => $category->id,
+            'cost_price' => 80.00,
+            'selling_price' => 100.00,
+            'reorder_level' => 10,
+        ])
+        ->assertCreated();
+});
+
+it('allows a warehouse user to create a product', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $category = Category::factory()->create();
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'name' => 'Warehouse Product',
+            'sku' => 'SKU-WH-001',
+            'category_id' => $category->id,
+            'cost_price' => 120.00,
+            'selling_price' => 150.00,
+            'reorder_level' => 10,
+        ])
+        ->assertCreated();
+});
+
+it('prevents a sales user from creating a product', function () {
+    $sales = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $category = Category::factory()->create();
+
+    $this->actingAs($sales, 'sanctum')
+        ->postJson('/api/v1/products', [
+            'name' => 'Sales Product',
+            'sku' => 'SKU-SALES-001',
+            'category_id' => $category->id,
+            'cost_price' => 160.00,
+            'selling_price' => 200.00,
+            'reorder_level' => 10,
+        ])
+        ->assertForbidden();
+});
+
+it('prevents a warehouse user from deleting a product', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $product = Product::factory()->create();
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->deleteJson("/api/v1/products/{$product->id}")
+        ->assertForbidden();
 });

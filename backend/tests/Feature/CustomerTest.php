@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\UserRole;
 use App\Models\Customer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -112,4 +113,58 @@ test('a customer can be deleted', function () {
     $this->assertDatabaseMissing('customers', [
         'id' => $customer->id,
     ]);
+});
+
+it('allows an admin to create a customer', function () {
+    $admin = User::factory()->create([
+        'role' => UserRole::ADMIN,
+    ]);
+
+    $this->actingAs($admin, 'sanctum')
+        ->postJson('/api/v1/customers', [
+            'name' => 'Admin Customer',
+            'phone' => '0771234567',
+            'email' => 'admin.customer@example.com',
+        ])
+        ->assertCreated();
+});
+
+it('allows a sales user to create a customer', function () {
+    $sales = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $this->actingAs($sales, 'sanctum')
+        ->postJson('/api/v1/customers', [
+            'name' => 'Sales Customer',
+            'phone' => '0771234568',
+            'email' => 'sales.customer@example.com',
+        ])
+        ->assertCreated();
+});
+
+it('prevents a warehouse user from creating a customer', function () {
+    $warehouse = User::factory()->create([
+        'role' => UserRole::WAREHOUSE,
+    ]);
+
+    $this->actingAs($warehouse, 'sanctum')
+        ->postJson('/api/v1/customers', [
+            'name' => 'Warehouse Customer',
+            'phone' => '0771234569',
+            'email' => 'warehouse.customer@example.com',
+        ])
+        ->assertForbidden();
+});
+
+it('prevents a sales user from deleting a customer', function () {
+    $sales = User::factory()->create([
+        'role' => UserRole::SALES,
+    ]);
+
+    $customer = Customer::factory()->create();
+
+    $this->actingAs($sales, 'sanctum')
+        ->deleteJson("/api/v1/customers/{$customer->id}")
+        ->assertForbidden();
 });
