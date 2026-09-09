@@ -1,19 +1,43 @@
-﻿:root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #172b42;
-  background: #f4f6f8;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  line-height: 1.6;
+﻿@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-canvas: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-ink: #172b42;
+  --color-muted: #526174;
+  --color-line: #dce3e8;
+  --color-field-border: #7c8b9d;
+  --color-brand: #0f766e;
+  --color-brand-hover: #115e59;
+  --color-brand-soft: #f0fdfa;
+  --color-success: #166534;
+  --color-success-soft: #f0fdf4;
+  --color-warning: #92400e;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-hover: #991b1b;
+  --color-danger-soft: #fef2f2;
+  --color-info: #1e40af;
+  --color-info-soft: #eff6ff;
+  --color-neutral: #475569;
+  --color-neutral-soft: #f1f5f9;
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer base {
+  :root {
+    color-scheme: light;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-body {
-  margin: 0;
-  min-width: 320px;
+  body {
+    @apply m-0 min-w-80 bg-canvas font-sans leading-relaxed text-ink;
+  }
+
+  ::selection {
+    @apply bg-brand text-white;
+  }
 }

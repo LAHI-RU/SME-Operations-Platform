@@ -1,16 +1,7 @@
-﻿import './App.css'
+import { DesignSystemPreview } from './pages/DesignSystemPreview'
 
 function App() {
-  return (
-    <main className="welcome">
-      <p className="eyebrow">SME Operations</p>
-      <h1>Order fulfillment &amp; inventory</h1>
-      <p className="description">
-        A shared workspace for sales, warehouse, and delivery teams.
-      </p>
-      <p className="setup-note">Your operations workspace is taking shape.</p>
-    </main>
-  )
+  return <DesignSystemPreview />
 }
 
 export default App
