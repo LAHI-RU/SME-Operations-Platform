@@ -1,6 +1,7 @@
 import { Layers } from 'lucide-react'
 import { Link, NavLink } from 'react-router'
-import { navigationGroups } from '../../lib/navigation'
+import { visibleNavigationGroups } from '../../lib/navigation'
+import { useAuth } from '../../features/auth/use-auth'
 
 export function WorkspaceBrand() {
   return (
@@ -12,9 +13,10 @@ export function WorkspaceBrand() {
 }
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { status, user } = useAuth()
   return (
     <nav aria-label="Main navigation" className="space-y-6">
-      {navigationGroups.map((group) => (
+      {visibleNavigationGroups(status === 'authenticated' ? user : null).map((group) => (
         <div key={group.label}>
           <p className="mb-2 px-3 text-xs font-semibold tracking-wider text-muted uppercase">{group.label}</p>
           <ul className="space-y-1">

@@ -3,21 +3,28 @@ import { Outlet, useLocation } from 'react-router'
 import { findNavigationItem } from '../../lib/navigation'
 import { Sidebar, WorkspaceBrand } from './Sidebar'
 import { Topbar } from './Topbar'
+import { useAuth } from '../../features/auth/use-auth'
+import { can } from '../../features/auth/permissions'
 
 export function AppLayout() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
+  const page = findNavigationItem(pathname)
+  const denied = page ? !can(user, page.capability) : false
   const main = useRef<HTMLElement>(null)
   const previousPath = useRef(pathname)
+  const previousDenied = useRef(denied)
 
   useEffect(() => {
     const page = findNavigationItem(pathname)
-    document.title = `${page?.label ?? 'Page not found'} | SME Operations`
-    if (previousPath.current !== pathname) {
+    document.title = `${denied ? 'Access denied' : page?.label ?? 'Page not found'} | SME Operations`
+    if (previousPath.current !== pathname || previousDenied.current !== denied) {
       main.current?.focus()
       window.scrollTo({ top: 0, behavior: 'instant' })
       previousPath.current = pathname
+      previousDenied.current = denied
     }
-  }, [pathname])
+  }, [pathname, denied])
 
   return (
     <div className="min-h-dvh">

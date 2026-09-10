@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import { authStore } from './lib/api'
 import { AuthGate } from './features/auth/AuthGate'
 import { LoginPage } from './features/auth/LoginPage'
+import { CapabilityGate } from './features/auth/CapabilityGate'
 
 function App() {
   useEffect(() => { void authStore.restore() }, [])
@@ -21,7 +22,7 @@ function App() {
           <Route path="dashboard" element={<DashboardPreview />} />
           <Route path="design-system" element={<DesignSystemPreview />} />
           {navigationItems.filter((item) => !['/dashboard', '/design-system'].includes(item.path)).map((item) => (
-            <Route key={item.path} path={item.path} element={<ModulePreview item={item} />} />
+            <Route key={item.path} path={item.path} element={<CapabilityGate capability={item.capability}><ModulePreview item={item} /></CapabilityGate>} />
           ))}
           <Route path="*" element={<NotFoundPage />} />
         </Route>

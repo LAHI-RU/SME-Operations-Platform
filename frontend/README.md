@@ -4,11 +4,11 @@ Separate React + TypeScript + Vite application for the Laravel API in `../backen
 
 ## Current step
 
-Step 5 (Checkpoint 06) connects login, session restoration, protected routes, the
-real account/role display, and sign-out to Laravel. Sessions persist in sessionStorage
-and are validated with `/auth/me` after refresh. No new dependencies are needed.
-Business modules remain previews; role-aware navigation and actions follow in
-the next checkpoint. Backend policies remain the security boundary.
+Step 6 (Checkpoint 07) adds centralized capabilities, navigation filtering,
+capability-protected module routes, and role-specific permission previews.
+Login, session restoration, and sign-out remain connected to Laravel.
+Business operations are still placeholders. Backend policies remain the security
+boundary; this step adds no backend endpoints, policies, users, or dependencies.
 
 ## Run locally
 
@@ -41,18 +41,22 @@ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
 Preview serves the production build at http://127.0.0.1:4173. It is a local check,
 not a production hosting server. Build output is in `dist/` and is ignored by Git.
 `npm test` runs the Node test runner with jsdom and Vite's TypeScript transform.
-The 16 navigation/login integration tests cover the root redirect, module routes, active links,
+The 21 navigation/login integration tests cover the root redirect, module routes, active links,
 document titles, focus/scroll behavior, mobile menu dismissal, history navigation,
 path variants, component-preview validation, and 404 recovery. These DOM simulations
 do not verify visual appearance, CSS breakpoints, or real browser layout.
 They also exercise login validation, password visibility, duplicate-submit blocking,
 return links, logout, and logout failure feedback with mocked HTTP responses.
+Role checks cover both navigation surfaces, dashboard shortcuts, direct URL denial,
+action labels for all four roles, and capability changes in the active auth state.
 The 26 API-client tests cover URL configuration, request serialization, token
 selection, response envelopes, HTTP errors, cancellation, timeout, and real fetch
 transport against a temporary local test server. They do not use business data.
 The 15 auth-store tests cover session restoration, token persistence, response
 validation, all four roles, expiry, failed requests, and stale-response races.
-Total: 57 frontend tests. Test Vite servers disable WebSockets/file watching and
+Six capability tests verify the 31-capability policy matrix, unknown role/capability
+denial, and navigation filtering. Total: 68 frontend tests.
+Test Vite servers disable WebSockets/file watching and
 use separate caches to avoid colliding with one another or the development server.
 
 The scripts invoke each installed tool through Node directly. This avoids npm's
@@ -95,6 +99,10 @@ workspace name. These relative Node commands also work on Linux and in Docker.
 - `src/features/auth/AuthGate.tsx`: loading/error boundaries, route protection, and internal return links.
 - `src/features/auth/LoginPage.tsx`: accessible two-field login form and validation feedback.
 - `tests/auth-store.test.mjs`: authentication lifecycle and concurrency tests.
+- `src/features/auth/permissions.ts`: the centralized `can(user, capability)` policy map.
+- `src/features/auth/Can.tsx`: hides UI children when the current session lacks a capability.
+- `src/features/auth/CapabilityGate.tsx`: a recoverable Access denied page for protected module routes.
+- `tests/permissions.test.mjs`: expected capabilities derived from the Laravel policies.
 
 Consult `../BACKEND_API_CONTRACT.md` before implementing API clients. Role responses
 and conflict handling are available; pending-stock retry, delivery lookup/ownership,
@@ -120,7 +128,7 @@ separate PostCSS setup is needed.
 
 ## Manual preview checks
 
-1. At desktop width (1024px+), check the sidebar and active page link. Try every module.
+1. At desktop width (1024px+), check the sidebar and active page link. Try each permitted module.
 2. At 375px width, open Menu with Enter/Space. Tab to a link, then press Escape:
    the menu should close and focus return to Menu. Select a link: the menu closes
    and focus moves to page content. This is an inline disclosure, not a modal drawer.
@@ -133,6 +141,8 @@ separate PostCSS setup is needed.
    Display name validation with input focus, and valid submission feedback.
 7. At mobile width and 200% browser zoom, check wrapping and no horizontal scrolling.
    Check every order status badge has a readable label.
+8. On a business module preview, check the Your role in this area section. It lists
+   permissions as labels, not working action buttons. Compare with the matrix below.
 
 Browser interaction and visual verification require the manual checks above when no
 browser is connected to Codex.
@@ -150,6 +160,10 @@ route is intentionally available behind authentication in this checkpoint's prev
 build; revisit its visibility before production. `/login` is public. All workspace
 routes are protected, including the component catalog and the 404 page. Signed-in
 users visiting `/login` return to a safe internal destination or `/dashboard`.
+Module entries, desktop/mobile navigation, and dashboard shortcuts share the same
+capability metadata. A disallowed direct module URL renders Access denied inside
+the layout with a route back to the dashboard. This frontend 403 page is not an
+HTTP authorization boundary.
 
 Vite handles deep links locally. At the hosting checkpoint, configure the frontend
 server to fall back to `index.html` for application paths so refresh/direct links
@@ -284,5 +298,65 @@ not accounts to use in the application):
 8. Review login at mobile width and 200% zoom, keyboard focus, and password-manager
    autofill. Real browser interaction and CORS still need this manual check.
 
+## Role capabilities
+
+The source of truth for this checkpoint is `backend/app/Policies/` and the
+`Gate::authorize` calls in the API controllers. All four authenticated roles can
+currently read categories, products, customers, suppliers, inventory/transactions,
+orders, and delivery details. These read links remain visible for every role.
+Dashboard and design-system access are local UI capabilities for authenticated roles.
+
+| Role | Permitted write operations in the existing policies |
+| --- | --- |
+| ADMIN | All registered create/update/delete, stock, order, fulfillment, and delivery operations. |
+| SALES | Create/update customers; create/submit orders; assign delivery. |
+| WAREHOUSE | Create/update products and suppliers; stock in/out; confirm orders; start/complete fulfillment. |
+| DELIVERY | Start/complete delivery. |
+
+The standalone fulfillment workspace is for picking/packing operations, so entry
+uses `fulfillment.start` (ADMIN/WAREHOUSE). There is no fulfillment-read endpoint
+to map a read-only fulfillment workspace to. SALES and DELIVERY cannot see its
+navigation item or dashboard shortcut; opening `/fulfillment` directly shows
+Access denied. Other permitted read pages stay accessible even when the role has
+no write actions, and their previews explain that access is read-only.
+
+Each module's `actions` metadata names its future operations. `Can` renders only
+the permitted labels in the preview. As real forms and actions are implemented,
+use the same capability keys instead of comparing roles in individual components:
+
+```typescript
+import { can } from './features/auth/permissions'
+
+const mayConfirmOrders = can(user, 'orders.confirm')
+```
+
+For conditional React content, use `<Can capability="orders.confirm">...</Can>`.
+`CapabilityGate` protects page content and shows Access denied for a disallowed
+capability. Missing/unknown roles and unsupported capabilities fail closed. The
+ADMIN role receives only listed capabilities, not a wildcard for unimplemented APIs.
+
+These checks describe role permissions only. Future action availability must also
+account for record state and Laravel responses. They do not authorize HTTP calls,
+validate stock availability, or enforce ownership. There are no new operations for
+order edit/cancellation, driver lookup, or fulfillment/history reads. In particular,
+the current backend does not restrict delivery actions to the assigned driver;
+that documented hardening gap still needs a backend change. Do not describe the
+current DELIVERY interface as enforcing assignment-only access.
+
+Review with existing role accounts if available; automated tests use mocked role
+fixtures and do not create accounts or change roles in your development database:
+
+1. ADMIN: all module links and relevant action labels are visible.
+2. SALES: fulfillment is absent; orders show Create/Submit, delivery shows Assign,
+   and products show read-only guidance.
+3. WAREHOUSE: fulfillment is present; orders show Confirm, inventory shows Stock
+   in/out, and delivery shows read-only guidance.
+4. DELIVERY: fulfillment is absent; delivery shows Start/Complete, and orders show
+   read-only guidance. Other existing read permissions remain visible.
+5. As SALES/DELIVERY, visit `/fulfillment`: expect Access denied and a working
+   Back to dashboard link. Confirm desktop/mobile navigation agree.
+6. Refresh after a real backend role change so `/auth/me` loads the current role.
+   Backend authorization remains effective even while a frontend session is stale.
+
 Commits are manual. Suggested message for this step:
-`feat: add authentication and protected workspace routes`
+`feat: add role-aware capabilities and navigation guards`

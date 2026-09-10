@@ -87,8 +87,8 @@ test('the root redirects to dashboard and shows the authenticated account', () =
   assert.match(document.querySelector('header').textContent, /SALES/)
 })
 
-test('all module deep links show the right heading, title, and active navigation', async () => {
-  const modules = ['Orders', 'Fulfillment', 'Delivery', 'Products', 'Categories', 'Inventory', 'Customers', 'Suppliers']
+test('all permitted module deep links show the right heading, title, and active navigation', async () => {
+  const modules = ['Orders', 'Delivery', 'Products', 'Categories', 'Inventory', 'Customers', 'Suppliers']
   for (const label of modules) {
     const path = `/${label.toLowerCase()}`
     await visit(path)
@@ -262,4 +262,54 @@ test('login blocks duplicate submissions and rejects an external return destinat
   pendingLogin = null
   assert.equal(window.location.pathname, '/dashboard')
   assert.equal(window.location.origin, 'http://localhost')
+})
+
+const expectedActions = {
+  ADMIN: {
+    orders: ['Create orders', 'Submit orders', 'Confirm orders'], products: ['Create products', 'Update products', 'Delete products'],
+    categories: ['Create categories', 'Update categories', 'Delete categories'], inventory: ['Stock in', 'Stock out'],
+    customers: ['Create customers', 'Update customers', 'Delete customers'], suppliers: ['Create suppliers', 'Update suppliers', 'Delete suppliers'],
+    delivery: ['Assign delivery', 'Start delivery', 'Complete delivery'],
+  },
+  SALES: { orders: ['Create orders', 'Submit orders'], products: [], categories: [], inventory: [], customers: ['Create customers', 'Update customers'], suppliers: [], delivery: ['Assign delivery'] },
+  WAREHOUSE: { orders: ['Confirm orders'], products: ['Create products', 'Update products'], categories: [], inventory: ['Stock in', 'Stock out'], customers: [], suppliers: ['Create suppliers', 'Update suppliers'], delivery: [] },
+  DELIVERY: { orders: [], products: [], categories: [], inventory: [], customers: [], suppliers: [], delivery: ['Start delivery', 'Complete delivery'] },
+}
+
+for (const role of ['ADMIN', 'SALES', 'WAREHOUSE', 'DELIVERY']) {
+  test(`${role} sees matching desktop/mobile navigation, page access, and action previews`, async () => {
+    account.role = role
+    await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+    await visit('/dashboard')
+    const hasFulfillment = ['ADMIN', 'WAREHOUSE'].includes(role)
+    for (const navigation of document.querySelectorAll('nav')) assert.equal(Boolean(navigation.querySelector('a[href="/fulfillment"]')), hasFulfillment)
+    assert.equal(Boolean(document.querySelector('main a[href="/fulfillment"]')), hasFulfillment)
+    await visit('/fulfillment')
+    assert.equal(document.querySelector('h1').textContent, hasFulfillment ? 'Fulfillment' : 'Access denied')
+    assert.equal(document.title, `${hasFulfillment ? 'Fulfillment' : 'Access denied'} | SME Operations`)
+    if (!hasFulfillment) {
+      assert.equal(document.querySelector('#module-preview-heading'), null)
+      await click(document.querySelector('main a[href="/dashboard"]'))
+      assert.equal(document.querySelector('h1').textContent, 'Dashboard')
+    } else {
+      assert.deepEqual([...document.querySelectorAll('main li')].map((item) => item.textContent), ['Start fulfillment', 'Complete fulfillment'])
+    }
+    for (const [module, labels] of Object.entries(expectedActions[role])) {
+      await visit(`/${module}`)
+      assert.deepEqual([...document.querySelectorAll('main li')].map((item) => item.textContent), labels, `${role}: ${module}`)
+      if (!labels.length) assert.match(document.querySelector('main').textContent, /Your role can view records/)
+      assert.equal(document.querySelectorAll('main button').length, 0, 'Preview permissions must not pretend to execute operations')
+    }
+  })
+}
+
+test('losing a capability while on that route replaces its contents and updates navigation', async () => {
+  account.role = 'WAREHOUSE'
+  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  await visit('/fulfillment')
+  account.role = 'SALES'
+  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  assert.equal(document.querySelector('h1').textContent, 'Access denied')
+  assert.equal(document.querySelectorAll('nav a[href="/fulfillment"]').length, 0)
+  assert.equal(document.activeElement.id, 'main')
 })

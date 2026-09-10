@@ -2,10 +2,15 @@ import { ArrowRight, Compass } from 'lucide-react'
 import { Link } from 'react-router'
 import { Card } from '../components/ui/Card'
 import { navigationItems, type NavigationItem } from '../lib/navigation'
+import { can } from '../features/auth/permissions'
+import { useAuth } from '../features/auth/use-auth'
+import { Can } from '../features/auth/Can'
+import { Badge } from '../components/ui/Badge'
 
 const linkStyle = 'inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-brand hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand'
 
 export function DashboardPreview() {
+  const { user } = useAuth()
   return (
     <>
       <div>
@@ -20,8 +25,8 @@ export function DashboardPreview() {
       </Card>
       <section aria-labelledby="explore-heading">
         <h2 id="explore-heading" className="mb-4 font-semibold">Explore operations</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          {navigationItems.filter((item) => ['/orders', '/inventory', '/delivery'].includes(item.path)).map(({ path, label, description, icon: Icon }) => (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {navigationItems.filter((item) => ['/orders', '/fulfillment', '/inventory', '/delivery'].includes(item.path) && can(user, item.capability)).map(({ path, label, description, icon: Icon }) => (
             <Card key={path} aria-label={label}>
               <Icon aria-hidden="true" className="mb-4 size-5 text-brand" />
               <h3 className="font-semibold">{label}</h3>
@@ -36,6 +41,7 @@ export function DashboardPreview() {
 }
 
 export function ModulePreview({ item }: { item: NavigationItem }) {
+  const { user } = useAuth()
   const Icon = item.icon
   return (
     <>
@@ -45,6 +51,15 @@ export function ModulePreview({ item }: { item: NavigationItem }) {
         <h2 id="module-preview-heading" className="text-lg font-semibold">{item.label} workspace coming soon</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted">This page is a navigation preview. Records and actions will be available when this module is connected.</p>
         <Link to="/dashboard" className={`${linkStyle} mt-5`}>Back to dashboard<ArrowRight aria-hidden="true" className="size-4" /></Link>
+      </Card>
+      <Card aria-labelledby="role-actions-heading">
+        <h2 id="role-actions-heading" className="font-semibold">Your role in this area</h2>
+        {item.actions.some((action) => can(user, action.capability)) ? <>
+          <ul className="mt-4 flex flex-wrap gap-3">
+            {item.actions.map((action) => <Can key={action.capability} capability={action.capability}><li><Badge tone="info">{action.label}</Badge></li></Can>)}
+          </ul>
+          <p className="mt-4 text-sm text-muted">These permissions apply when this module is available. Each action also depends on the record's current state.</p>
+        </> : <p className="mt-3 text-sm text-muted">Your role can view records in this area. Changes require a role with additional permissions.</p>}
       </Card>
     </>
   )
