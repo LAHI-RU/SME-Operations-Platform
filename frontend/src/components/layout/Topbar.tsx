@@ -54,8 +54,8 @@ export function Topbar() {
         </div>
       </details>
       <div className="flex items-start gap-3 border-t border-line bg-brand-soft px-4 py-3 sm:px-6 lg:px-8">
-        <Badge tone="info" className="shrink-0">Layout preview</Badge>
-        <p id="layout-preview-note" className="text-sm text-muted">Business modules are still previews. Your account is connected.</p>
+        <Badge tone="info" className="shrink-0">In development</Badge>
+        <p id="layout-preview-note" className="text-sm text-muted">Account access and order summaries are connected. Business actions are still being built.</p>
       </div>
     </header>
   )

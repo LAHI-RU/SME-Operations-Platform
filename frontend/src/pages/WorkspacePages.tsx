@@ -1,44 +1,13 @@
-import { ArrowRight, Compass } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { Card } from '../components/ui/Card'
-import { navigationItems, type NavigationItem } from '../lib/navigation'
+import { type NavigationItem } from '../lib/navigation'
 import { can } from '../features/auth/permissions'
 import { useAuth } from '../features/auth/use-auth'
 import { Can } from '../features/auth/Can'
 import { Badge } from '../components/ui/Badge'
 
 const linkStyle = 'inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-brand hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand'
-
-export function DashboardPreview() {
-  const { user } = useAuth()
-  return (
-    <>
-      <div>
-        <p className="mb-2 text-xs font-semibold tracking-wider text-brand uppercase">Workspace</p>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-3 max-w-2xl text-muted">A shared place for orders, stock, and delivery. Explore the workspace while the operational screens are being built.</p>
-      </div>
-      <Card aria-labelledby="overview-heading" className="border-brand/20 bg-brand-soft">
-        <Compass aria-hidden="true" className="mb-4 size-8 text-brand" />
-        <h2 id="overview-heading" className="text-xl font-semibold">Your workspace is taking shape</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted">Live summaries will appear once business data is connected. For now, use the navigation to explore each area.</p>
-      </Card>
-      <section aria-labelledby="explore-heading">
-        <h2 id="explore-heading" className="mb-4 font-semibold">Explore operations</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {navigationItems.filter((item) => ['/orders', '/fulfillment', '/inventory', '/delivery'].includes(item.path) && can(user, item.capability)).map(({ path, label, description, icon: Icon }) => (
-            <Card key={path} aria-label={label}>
-              <Icon aria-hidden="true" className="mb-4 size-5 text-brand" />
-              <h3 className="font-semibold">{label}</h3>
-              <p className="mt-2 text-sm text-muted">{description}</p>
-              <Link to={path} className={`${linkStyle} mt-4`}>Explore {label.toLowerCase()}<ArrowRight aria-hidden="true" className="size-4" /></Link>
-            </Card>
-          ))}
-        </div>
-      </section>
-    </>
-  )
-}
 
 export function ModulePreview({ item }: { item: NavigationItem }) {
   const { user } = useAuth()

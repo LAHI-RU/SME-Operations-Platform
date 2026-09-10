@@ -4,11 +4,11 @@ Separate React + TypeScript + Vite application for the Laravel API in `../backen
 
 ## Current step
 
-Step 6 (Checkpoint 07) adds centralized capabilities, navigation filtering,
-capability-protected module routes, and role-specific permission previews.
-Login, session restoration, and sign-out remain connected to Laravel.
-Business operations are still placeholders. Backend policies remain the security
-boundary; this step adds no backend endpoints, policies, users, or dependencies.
+Step 7 (Checkpoint 08) connects the dashboard to real order totals and the five
+newest orders. TanStack Query manages loading, caching, cancellation, and refresh.
+Authentication and capability checks remain connected. Business action screens
+remain previews; low-stock totals need backend aggregation support. This step
+does not add backend endpoints, policies, users, or business mutations.
 
 ## Run locally
 
@@ -41,7 +41,7 @@ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort
 Preview serves the production build at http://127.0.0.1:4173. It is a local check,
 not a production hosting server. Build output is in `dist/` and is ignored by Git.
 `npm test` runs the Node test runner with jsdom and Vite's TypeScript transform.
-The 21 navigation/login integration tests cover the root redirect, module routes, active links,
+The 28 navigation/login/dashboard integration tests cover the root redirect, module routes, active links,
 document titles, focus/scroll behavior, mobile menu dismissal, history navigation,
 path variants, component-preview validation, and 404 recovery. These DOM simulations
 do not verify visual appearance, CSS breakpoints, or real browser layout.
@@ -49,13 +49,18 @@ They also exercise login validation, password visibility, duplicate-submit block
 return links, logout, and logout failure feedback with mocked HTTP responses.
 Role checks cover both navigation surfaces, dashboard shortcuts, direct URL denial,
 action labels for all four roles, and capability changes in the active auth state.
+Dashboard cases cover real totals, partial failures, stale-result labels, permission
+failures, empty results, session cache isolation, loading, and request cancellation.
 The 26 API-client tests cover URL configuration, request serialization, token
 selection, response envelopes, HTTP errors, cancellation, timeout, and real fetch
 transport against a temporary local test server. They do not use business data.
 The 15 auth-store tests cover session restoration, token persistence, response
 validation, all four roles, expiry, failed requests, and stale-response races.
 Six capability tests verify the 31-capability policy matrix, unknown role/capability
-denial, and navigation filtering. Total: 68 frontend tests.
+denial, and navigation filtering. Five dashboard API tests verify pagination totals,
+exact status filters, nullable fields, malformed data rejection, and empty results.
+Total: 80 frontend tests. The dashboard was also checked against the running local
+Laravel/PostgreSQL API; the temporary verification token was revoked afterward.
 Test Vite servers disable WebSockets/file watching and
 use separate caches to avoid colliding with one another or the development server.
 
@@ -103,6 +108,10 @@ workspace name. These relative Node commands also work on Linux and in Docker.
 - `src/features/auth/Can.tsx`: hides UI children when the current session lacks a capability.
 - `src/features/auth/CapabilityGate.tsx`: a recoverable Access denied page for protected module routes.
 - `tests/permissions.test.mjs`: expected capabilities derived from the Laravel policies.
+- `src/lib/query-client.ts`: TanStack Query defaults shared by authenticated screens.
+- `src/features/dashboard/dashboard-api.ts`: six supported order-summary requests and response decoding.
+- `src/features/dashboard/DashboardPage.tsx`: live metrics, recent orders, refresh, and partial-error states.
+- `tests/dashboard-api.test.mjs`: dashboard response and filter contract tests.
 
 Consult `../BACKEND_API_CONTRACT.md` before implementing API clients. Role responses
 and conflict handling are available; pending-stock retry, delivery lookup/ownership,
@@ -358,5 +367,71 @@ fixtures and do not create accounts or change roles in your development database
 6. Refresh after a real backend role change so `/auth/me` loads the current role.
    Backend authorization remains effective even while a frontend session is stale.
 
+## Dashboard data and verification
+
+The current API has no `/dashboard` endpoint. Each dashboard load uses six existing
+`GET /orders` requests with `page=1`. The unfiltered `per_page=5` response provides
+both the total and recent records; five `per_page=1` status queries provide the
+remaining counts. Counts come from `meta.total`, never the number of rows in a page.
+
+| Dashboard card | Source |
+| --- | --- |
+| Total orders | Unfiltered orders `meta.total`, including every status. |
+| Awaiting confirmation | `status=SUBMITTED` |
+| Waiting for stock | `status=PENDING_STOCK` |
+| Ready to pack | `status=CONFIRMED` |
+| Ready for delivery | `status=READY_FOR_DELIVERY` |
+| Out for delivery | `status=OUT_FOR_DELIVERY` |
+
+Counts represent current status across all dates, not daily events or a complete
+status breakdown. They are independent requests, not an atomic snapshot, and may
+change between requests. No status counts are summed into a purported global total.
+The current backend order list is not scoped by delivery ownership, so this is
+an overview of accessible orders, not a personal assigned-delivery dashboard.
+
+Recent orders follow the backend's descending ID order and show at most five
+records: order number, nullable customer name, exact status badge, and creation
+date. Dates use the browser's locale/timezone. Currency and revenue are omitted
+because the API has no currency contract or aggregate revenue endpoint. Row links
+and status-filter shortcuts are deferred until the order screens exist; the Orders
+workspace link opens the existing preview.
+
+Low-stock totals cannot be computed from a single products page. The stock section
+explicitly states that totals are unavailable; it does not scan the full catalog
+or fabricate a zero. Add a global low-stock aggregate when backend support is designed.
+
+TanStack Query defaults are explicit: 30-second freshness, no automatic retries,
+no refetch on window focus, and normal stale-query refetch on remount/reconnection.
+There is no polling. Refresh dashboard refreshes its active queries together.
+Each query passes its cancellation signal through the shared fetch client.
+See [TanStack Query's defaults](https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults).
+
+Query data stays in memory. The auth state has a non-secret session version;
+successful login/restoration and session clearing change it. The API composition
+subscribes to this change and synchronously clears the query cache, cancelling
+pending queries before another session can use cached data. Tokens are never query
+keys or persisted query data. A failed sign-out preserves the current session/cache.
+Tests disable query garbage-collection timers and clear the cache during teardown
+so Node does not wait for browser-oriented cleanup timers.
+
+Failures never turn into fake zero counts. Initial failures display Unavailable;
+refresh failures can show explicitly labeled last-known values while other cards
+remain usable. A 401/403 suppresses cached results for the rejected query; a 401
+also clears the matching session. Malformed totals, unknown statuses, and malformed
+recent records produce controlled errors instead of silently populating the UI.
+
+Manual dashboard review:
+
+1. Sign in and open `/dashboard`: expect six order summary cards and up to five
+   recent records from your database, or an explicit empty state.
+2. Compare a count with the matching `/orders` API paginator total, not its row count.
+3. Click Refresh dashboard: expect progress feedback followed by updated timestamps.
+4. Stop the API and refresh: expect error feedback and clearly marked prior values.
+   Restart the API and refresh again to recover.
+5. Sign out and sign in again: previous session data must not flash on the dashboard.
+6. At mobile width/200% zoom, confirm cards stack, long customer names wrap, and the
+   recent-orders table scrolls within its own keyboard-focusable region.
+7. Confirm the Stock overview section explicitly says low-stock totals are unavailable.
+
 Commits are manual. Suggested message for this step:
-`feat: add role-aware capabilities and navigation guards`
+`feat: connect dashboard to live order summaries`

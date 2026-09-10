@@ -3,6 +3,7 @@ import { ApiError } from '../../lib/api/error'
 import { createAuthApi, type AuthUser, type LoginCredentials } from './auth-api'
 
 export interface AuthState {
+  sessionVersion: number
   status: 'loading' | 'anonymous' | 'authenticated' | 'unavailable'
   user: AuthUser | null
   error: string | null
@@ -17,7 +18,7 @@ type Options = Pick<ApiClientOptions, 'baseUrl' | 'fetch' | 'timeoutMs'> & {
 export function createAuthStore(options: Options) {
   const storageKey = `sme.auth.token:${options.baseUrl.replace(/\/+$/, '')}`
   let token: string | null = null
-  let state: AuthState = { status: 'loading', user: null, error: null, notice: null, signingOut: false }
+  let state: AuthState = { sessionVersion: 0, status: 'loading', user: null, error: null, notice: null, signingOut: false }
   let revision = 0
   let initialized = false
   let restoring: Promise<void> | null = null
@@ -41,7 +42,7 @@ export function createAuthStore(options: Options) {
     revision += 1
     initialized = true
     token = null
-    publish({ status: 'anonymous', user: null, error: null, notice, signingOut: false })
+    publish({ sessionVersion: state.sessionVersion + 1, status: 'anonymous', user: null, error: null, notice, signingOut: false })
     persist()
   }
   const api = createApiClient({
@@ -71,7 +72,7 @@ export function createAuthStore(options: Options) {
     restoring = (async () => {
       try {
         const account = await authApi.me()
-        if (revision === attempt) publish({ status: 'authenticated', user: account })
+        if (revision === attempt) publish({ sessionVersion: state.sessionVersion + 1, status: 'authenticated', user: account })
       } catch (error) {
         if (revision === attempt) publish({ status: 'unavailable', error: error instanceof ApiError ? error.message : 'Could not verify your session.' })
       } finally { restoring = null }
@@ -88,7 +89,7 @@ export function createAuthStore(options: Options) {
       if (revision !== attempt) throw new ApiError('cancelled', 'This sign-in attempt is no longer active.')
       token = result.token
       initialized = true
-      publish({ status: 'authenticated', user: result.user, error: null, notice: null })
+      publish({ sessionVersion: state.sessionVersion + 1, status: 'authenticated', user: result.user, error: null, notice: null })
       persist()
     })().finally(() => { loggingIn = null })
     return loggingIn

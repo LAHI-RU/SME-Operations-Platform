@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { after, before, test } from 'node:test'
+import { after, afterEach, before, test } from 'node:test'
 import { JSDOM } from 'jsdom'
 import { act, createElement, StrictMode } from 'react'
 import { createServer } from 'vite'
@@ -17,6 +17,14 @@ let loginStatus = 200
 let loginCalls = 0
 let logoutStatus = 200
 let pendingLogin = null
+let queryClient
+let dashboardTotal = 37
+let dashboardFailure = null
+let dashboardFailureStatus = 503
+let recentEmpty = false
+let dashboardPending = null
+const dashboardRequests = []
+const recentOrder = { id: 101, order_number: 'SO-0101', status: 'PENDING_STOCK', customer: { name: 'Example Customer' }, created_at: '2026-09-10T06:30:00.000Z' }
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 before(async () => {
@@ -26,7 +34,18 @@ before(async () => {
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.scrollTo = () => { scrollCalls += 1 }
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, options) => {
+    const parsed = new URL(url, 'http://localhost')
+    if (parsed.pathname.endsWith('/orders')) {
+      const status = parsed.searchParams.get('status')
+      dashboardRequests.push({ status, token: options.headers.get('Authorization') })
+      if (dashboardPending) return new Promise((resolve, reject) => {
+        dashboardPending.push(resolve)
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+      })
+      if (dashboardFailure === (status ?? 'recent')) return response({ message: 'Server Error' }, dashboardFailureStatus)
+      return response({ data: status || recentEmpty ? [] : [recentOrder], meta: { total: status ? 3 : dashboardTotal } })
+    }
     if (url.endsWith('/auth/login')) {
       loginCalls += 1
       if (pendingLogin) return pendingLogin.promise
@@ -47,6 +66,9 @@ before(async () => {
   })
   App = (await server.ssrLoadModule('/src/App.tsx')).default
   ;({ authStore } = await server.ssrLoadModule('/src/lib/api/index.ts'))
+  ;({ queryClient } = await server.ssrLoadModule('/src/lib/query-client.ts'))
+  // Avoid detached query garbage-collection timers keeping the Node test process alive.
+  queryClient.setDefaultOptions({ ...queryClient.getDefaultOptions(), queries: { ...queryClient.getDefaultOptions().queries, gcTime: Infinity } })
   await authStore.login({ email: account.email, password: 'fixture-only' })
   BrowserRouter = (await import('react-router')).BrowserRouter
   const { createRoot } = await import('react-dom/client')
@@ -56,6 +78,7 @@ before(async () => {
 
 after(async () => {
   if (root) await act(async () => root.unmount())
+  queryClient?.clear()
   await server?.close()
   dom?.window.close()
   delete globalThis.window
@@ -64,6 +87,15 @@ after(async () => {
   delete globalThis.IS_REACT_ACT_ENVIRONMENT
   globalThis.fetch = originalFetch
 })
+
+afterEach(async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 15)) }) })
+
+async function waitFor(check) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+    try { check(); return } catch (error) { if (attempt === 99) throw error }
+  }
+}
 
 async function visit(path) {
   await act(async () => {
@@ -80,7 +112,7 @@ async function click(element) {
 test('the root redirects to dashboard and shows the authenticated account', () => {
   assert.equal(window.location.pathname, '/dashboard')
   assert.equal(document.title, 'Dashboard | SME Operations')
-  assert.match(document.querySelector('main').textContent, /Live summaries will appear once/)
+  assert.match(document.querySelector('main').textContent, /Current order status across all accessible orders/)
   const signOut = [...document.querySelectorAll('button')].find((button) => button.textContent.includes('Sign out'))
   assert.equal(signOut.disabled, false)
   assert.match(document.querySelector('header').textContent, /Test Operator/)
@@ -312,4 +344,88 @@ test('losing a capability while on that route replaces its contents and updates 
   assert.equal(document.querySelector('h1').textContent, 'Access denied')
   assert.equal(document.querySelectorAll('nav a[href="/fulfillment"]').length, 0)
   assert.equal(document.activeElement.id, 'main')
+})
+
+const metric = (label) => document.querySelector(`section[aria-label="${label}"]`)
+const refreshDashboard = () => click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Refresh dashboard'))
+
+test('dashboard shows real totals, recent status badges, and an explicit stock limitation', async () => {
+  await visit('/dashboard')
+  await waitFor(() => assert.match(metric('Total orders').textContent, /37/))
+  assert.match(metric('Waiting for stock').textContent, /3/)
+  assert.match(document.querySelector('table').textContent, /SO-0101/)
+  assert.match(document.querySelector('table').textContent, /Pending stock/)
+  assert.match(document.querySelector('main').textContent, /Low-stock totals are not available yet/)
+})
+
+test('a partial refresh failure preserves other metrics and labels stale values', async () => {
+  dashboardFailure = 'PENDING_STOCK'
+  await refreshDashboard()
+  await waitFor(() => assert.match(metric('Waiting for stock').textContent, /Last known value/))
+  assert.match(metric('Total orders').textContent, /37/)
+  assert.match(document.querySelector('table').textContent, /SO-0101/)
+  dashboardFailure = null
+  await refreshDashboard()
+  await waitFor(() => assert.doesNotMatch(metric('Waiting for stock').textContent, /Last known value/))
+})
+
+test('a permission failure suppresses a formerly cached count', async () => {
+  dashboardFailure = 'SUBMITTED'
+  dashboardFailureStatus = 403
+  await refreshDashboard()
+  await waitFor(() => assert.match(metric('Awaiting confirmation').textContent, /Unavailable/))
+  assert.match(metric('Awaiting confirmation').textContent, /permission/)
+  dashboardFailure = null
+  dashboardFailureStatus = 503
+  await refreshDashboard()
+  await waitFor(() => assert.doesNotMatch(metric('Awaiting confirmation').textContent, /Unavailable/))
+})
+
+test('a recent-order refresh failure explicitly marks previously loaded records', async () => {
+  dashboardFailure = 'recent'
+  await refreshDashboard()
+  await waitFor(() => assert.match(document.querySelector('main').textContent, /Showing previously loaded orders/))
+  dashboardFailure = null
+  recentEmpty = true
+  dashboardTotal = 0
+  await refreshDashboard()
+  await waitFor(() => assert.match(document.querySelector('main').textContent, /No orders yet/))
+  assert.equal(metric('Total orders').querySelector('p').textContent, '0')
+  assert.equal(document.querySelector('table'), null)
+})
+
+test('logout clears cached data and a new session does not reuse old summaries', async () => {
+  assert.ok(queryClient.getQueryCache().getAll().length > 0)
+  await act(async () => { await authStore.logout() })
+  assert.equal(queryClient.getQueryCache().getAll().length, 0)
+  dashboardTotal = 900
+  recentEmpty = false
+  const before = dashboardRequests.length
+  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  await waitFor(() => assert.match(metric('Total orders').textContent, /900/))
+  assert.ok(dashboardRequests.length >= before + 6)
+})
+
+test('initial failures display unavailable values and retry can recover', async () => {
+  await visit('/orders')
+  await act(async () => queryClient.clear())
+  dashboardFailure = 'recent'
+  await visit('/dashboard')
+  await waitFor(() => assert.match(metric('Total orders').textContent, /Unavailable/))
+  assert.equal(document.querySelector('table'), null)
+  dashboardFailure = null
+  await refreshDashboard()
+  await waitFor(() => assert.match(metric('Total orders').textContent, /900/))
+})
+
+test('loading placeholders do not invent counts and navigating away cancels requests', async () => {
+  await visit('/orders')
+  await act(async () => queryClient.clear())
+  dashboardPending = []
+  await visit('/dashboard')
+  assert.match(metric('Total orders').textContent, /Loading/)
+  assert.equal(document.querySelector('button[aria-busy="true"]').disabled, true)
+  await visit('/orders')
+  dashboardPending = null
+  assert.ok(queryClient.getQueryCache().getAll().every((query) => query.state.fetchStatus === 'idle'))
 })
