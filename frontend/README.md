@@ -4,11 +4,11 @@ Separate React + TypeScript + Vite application for the Laravel API in `../backen
 
 ## Current step
 
-Step 7 (Checkpoint 08) connects the dashboard to real order totals and the five
-newest orders. TanStack Query manages loading, caching, cancellation, and refresh.
-Authentication and capability checks remain connected. Business action screens
-remain previews; low-stock totals need backend aggregation support. This step
-does not add backend endpoints, policies, users, or business mutations.
+Step 8 (Checkpoint 09) adds product listing, details, creation, editing, and
+administrator deletion against the existing Laravel API. React Hook Form handles
+catalog forms; Zod validates catalog responses; TanStack Query manages reads and
+cache refresh. Other business modules remain previews. No backend endpoints,
+policies, users, or schema were changed.
 
 ## Run locally
 
@@ -59,7 +59,10 @@ validation, all four roles, expiry, failed requests, and stale-response races.
 Six capability tests verify the 31-capability policy matrix, unknown role/capability
 denial, and navigation filtering. Five dashboard API tests verify pagination totals,
 exact status filters, nullable fields, malformed data rejection, and empty results.
-Total: 80 frontend tests. The dashboard was also checked against the running local
+Five product API tests and 11 product DOM tests cover payloads, response validation,
+pagination, category paging, forms, role restrictions, deletion confirmation,
+server errors, duplicate submissions, and late writes after sign-out.
+Total: 96 frontend tests. The dashboard was also checked against the running local
 Laravel/PostgreSQL API; the temporary verification token was revoked afterward.
 Test Vite servers disable WebSockets/file watching and
 use separate caches to avoid colliding with one another or the development server.
@@ -127,7 +130,7 @@ separate PostCSS setup is needed.
 - Primary actions: teal. Destructive actions: red. Buttons default to `type="button"`;
   specify `type="submit"` for form submission. `loading` also disables interaction.
 - Inputs require a visible label and associate hints/errors through `aria-describedby`.
-  They accept native input props, including refs for React Hook Form integration later.
+  They accept native input props and refs used by the React Hook Form product forms.
 - Status colors: delivered = success; pending stock = warning; cancelled = danger;
   active workflow states = info; draft = neutral. Labels communicate status without color.
 - Cards use semantic sections; provide a heading and `aria-labelledby` when grouping content.
@@ -269,7 +272,7 @@ Only the token is stored, under a key scoped to the API base URL; passwords and
 user profiles are never persisted. `/auth/me` supplies fresh account data after
 reload, and all auth responses validate the account shape and the exact backend
 roles before accepting a session. The two-field login form uses native inputs
-and local React state; more complex feature forms can introduce React Hook Form.
+and local React state; product forms use React Hook Form.
 
 sessionStorage survives reloads and normally ends with the tab's browsing session.
 It remains accessible to JavaScript and is not an HttpOnly cookie. A newly opened
@@ -357,7 +360,7 @@ fixtures and do not create accounts or change roles in your development database
 
 1. ADMIN: all module links and relevant action labels are visible.
 2. SALES: fulfillment is absent; orders show Create/Submit, delivery shows Assign,
-   and products show read-only guidance.
+   and products allow viewing without create/edit/delete controls.
 3. WAREHOUSE: fulfillment is present; orders show Confirm, inventory shows Stock
    in/out, and delivery shows read-only guidance.
 4. DELIVERY: fulfillment is absent; delivery shows Start/Complete, and orders show
@@ -433,5 +436,59 @@ Manual dashboard review:
    recent-orders table scrolls within its own keyboard-focusable region.
 7. Confirm the Stock overview section explicitly says low-stock totals are unavailable.
 
+## Product catalog behavior and verification
+
+Routes: `/products`, `/products/new`, `/products/:productId`, and
+`/products/:productId/edit`. All four roles can read. ADMIN and WAREHOUSE can
+create/update; only ADMIN sees deletion. Direct form URLs enforce the same
+capabilities, and Laravel remains the authorization boundary.
+
+- `src/features/products/products-api.ts`: exact request payloads and Zod resource validation.
+- `src/features/products/ProductsPage.tsx`: real totals, URL page state, empty/error/retry states.
+- `src/features/products/ProductDetailPage.tsx`: prices, stock, status, and explicit delete confirmation.
+- `src/features/products/ProductFormPage.tsx`: create/edit, field feedback, focus, and category paging.
+- `src/features/products/product-queries.ts`: query keys and cache invalidation after writes.
+
+The backend fixes product pages at 15 records, newest ID first. There is no
+product search/filter endpoint, so this screen does not pretend to search the
+whole catalog locally. Out-of-range pages offer Previous to recover. Prices
+retain decimal strings and display without an invented currency symbol.
+
+A category must already exist. The selector can load subsequent category pages;
+editing preserves the current category before its page is loaded. Inactive
+categories remain selectable because the backend currently only requires that
+the category exists. Category management is a later checkpoint.
+
+Create sends catalog fields only; Laravel creates an active product with zero
+inventory. Edit sends all required fields using PUT, plus the active checkbox.
+Stock cannot be changed through this form. Values survive failed requests; 422
+errors appear at their fields. Pending submissions disable controls and block
+duplicate requests. Writes are never retried automatically. Success invalidates
+related lists and updates the detail cache; session changes discard late results.
+
+Deletion requires a separate confirmation with focus on Keep product. Successful
+deletion returns to the first list page. Related records may prevent deletion;
+the existing backend can return a generic 500 for foreign-key constraints, which
+is shown as a safe error without claiming the product was deleted. Marking a
+product inactive is available through Edit.
+
+Automated product UI tests use mocked HTTP responses, including all writes.
+The existing backend product suite also passes (10 tests, 25 assertions, isolated
+in-memory SQLite). Live Laravel/PostgreSQL reads validated the empty product list
+and three category records; there were no products for a live detail check. The
+verification token was revoked, and no business records were changed. These
+checks do not replace visual and real-browser testing.
+
+Manual review using disposable development products:
+
+1. Open Products; check actual rows, prices, stock, refresh, and Next/Previous.
+2. As ADMIN/WAREHOUSE, create a product with an existing category. Expect details,
+   a saved message, and zero initial stock. Try an existing SKU to see validation.
+3. Edit the name/prices and active state. Expect saved details and an updated list.
+4. As ADMIN, open Delete product, cancel, then confirm only for a disposable record.
+5. As SALES/DELIVERY, confirm create/edit/delete controls are absent and direct
+   form URLs show Access denied.
+6. At 375px and 200% zoom, check form labels, error focus, wrapping, and table scrolling.
+
 Commits are manual. Suggested message for this step:
-`feat: connect dashboard to live order summaries`
+`feat: add product catalog management`

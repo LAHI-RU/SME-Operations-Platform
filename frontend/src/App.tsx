@@ -11,6 +11,9 @@ import { authStore } from './lib/api'
 import { AuthGate } from './features/auth/AuthGate'
 import { LoginPage } from './features/auth/LoginPage'
 import { CapabilityGate } from './features/auth/CapabilityGate'
+import { ProductsPage } from './features/products/ProductsPage'
+import { ProductDetailPage } from './features/products/ProductDetailPage'
+import { ProductFormPage, EditProductPage } from './features/products/ProductFormPage'
 
 function App() {
   useEffect(() => { void authStore.restore() }, [])
@@ -24,7 +27,11 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="design-system" element={<DesignSystemPreview />} />
-          {navigationItems.filter((item) => !['/dashboard', '/design-system'].includes(item.path)).map((item) => (
+          <Route path="products" element={<CapabilityGate capability="products.view"><ProductsPage /></CapabilityGate>} />
+          <Route path="products/new" element={<CapabilityGate capability="products.create"><ProductFormPage /></CapabilityGate>} />
+          <Route path="products/:productId" element={<CapabilityGate capability="products.view"><ProductDetailPage /></CapabilityGate>} />
+          <Route path="products/:productId/edit" element={<CapabilityGate capability="products.update"><EditProductPage /></CapabilityGate>} />
+          {navigationItems.filter((item) => !['/dashboard', '/design-system', '/products'].includes(item.path)).map((item) => (
             <Route key={item.path} path={item.path} element={<CapabilityGate capability={item.capability}><ModulePreview item={item} /></CapabilityGate>} />
           ))}
           <Route path="*" element={<NotFoundPage />} />

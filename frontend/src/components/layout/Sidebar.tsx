@@ -22,7 +22,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <ul className="space-y-1">
             {group.items.map(({ path, label, icon: Icon }) => (
               <li key={path}>
-                <NavLink to={path} end onClick={onNavigate} className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${isActive ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-canvas hover:text-ink'}`}>
+                <NavLink to={path} end={path !== '/products'} onClick={onNavigate} className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${isActive ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-canvas hover:text-ink'}`}>
                   <Icon aria-hidden="true" className="size-4 shrink-0" />{label}
                 </NavLink>
               </li>

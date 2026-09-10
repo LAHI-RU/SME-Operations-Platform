@@ -65,6 +65,10 @@ export const navigationGroups: { label: string; items: NavigationItem[] }[] = [
 export const navigationItems: NavigationItem[] = navigationGroups.flatMap((group) => group.items)
 
 export function findNavigationItem(pathname: string) {
+  const product = navigationItems.find((item) => item.path === '/products')!
+  if (matchPath('/products/new', pathname)) return { ...product, label: 'New product', capability: 'products.create' as const }
+  if (matchPath('/products/:productId/edit', pathname)) return { ...product, label: 'Edit product', capability: 'products.update' as const }
+  if (matchPath('/products/:productId', pathname)) return { ...product, label: 'Product details' }
   return navigationItems.find((item) => matchPath(item.path, pathname))
 }
 
