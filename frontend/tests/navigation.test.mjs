@@ -24,36 +24,59 @@ let dashboardFailureStatus = 503
 let recentEmpty = false
 let dashboardPending = null
 const dashboardRequests = []
-const recentOrder = { id: 101, order_number: 'SO-0101', status: 'PENDING_STOCK', customer: { name: 'Example Customer' }, created_at: '2026-09-10T06:30:00.000Z' }
-const response = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+const recentOrder = {
+  items: [],
+  total_amount: '0.00',
+  notes: null,
+  order_date: null,
+  updated_at: null,
+  id: 101,
+  order_number: 'SO-0101',
+  status: 'PENDING_STOCK',
+  customer: { id: 1, customer_code: 'CUS-1', name: 'Example Customer' },
+  created_at: '2026-09-10T06:30:00.000Z',
+}
+const response = (data, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 before(async () => {
-  dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
+  dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
+    url: 'http://localhost/',
+  })
   globalThis.window = dom.window
   globalThis.document = dom.window.document
   globalThis.HTMLElement = dom.window.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
-  dom.window.scrollTo = () => { scrollCalls += 1 }
+  dom.window.scrollTo = () => {
+    scrollCalls += 1
+  }
   globalThis.fetch = async (url, options) => {
     const parsed = new URL(url, 'http://localhost')
     if (parsed.pathname.endsWith('/orders')) {
       const status = parsed.searchParams.get('status')
       dashboardRequests.push({ status, token: options.headers.get('Authorization') })
-      if (dashboardPending) return new Promise((resolve, reject) => {
-        dashboardPending.push(resolve)
-        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+      if (dashboardPending)
+        return new Promise((resolve, reject) => {
+          dashboardPending.push(resolve)
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+        })
+      if (dashboardFailure === (status ?? 'recent'))
+        return response({ message: 'Server Error' }, dashboardFailureStatus)
+      return response({
+        data: status || recentEmpty ? [] : [recentOrder],
+        meta: { current_page: 1, last_page: 3, per_page: 15, total: status ? 3 : dashboardTotal },
       })
-      if (dashboardFailure === (status ?? 'recent')) return response({ message: 'Server Error' }, dashboardFailureStatus)
-      return response({ data: status || recentEmpty ? [] : [recentOrder], meta: { total: status ? 3 : dashboardTotal } })
     }
     if (url.endsWith('/auth/login')) {
       loginCalls += 1
       if (pendingLogin) return pendingLogin.promise
-      if (loginStatus === 422) return response({ errors: { email: ['The provided credentials are incorrect.'] } }, 422)
+      if (loginStatus === 422)
+        return response({ errors: { email: ['The provided credentials are incorrect.'] } }, 422)
       if (loginStatus !== 200) throw new TypeError('offline')
       return response({ success: true, message: 'OK', data: { user: account, token: 'test-token' } })
     }
-    if (url.endsWith('/auth/logout')) return response({ success: true, message: 'OK', data: null }, logoutStatus)
+    if (url.endsWith('/auth/logout'))
+      return response({ success: true, message: 'OK', data: null }, logoutStatus)
     return response({ success: true, message: 'OK', data: account })
   }
   // Transform the actual TypeScript components with the app's Vite configuration.
@@ -68,12 +91,17 @@ before(async () => {
   ;({ authStore } = await server.ssrLoadModule('/src/lib/api/index.ts'))
   ;({ queryClient } = await server.ssrLoadModule('/src/lib/query-client.ts'))
   // Avoid detached query garbage-collection timers keeping the Node test process alive.
-  queryClient.setDefaultOptions({ ...queryClient.getDefaultOptions(), queries: { ...queryClient.getDefaultOptions().queries, gcTime: Infinity } })
+  queryClient.setDefaultOptions({
+    ...queryClient.getDefaultOptions(),
+    queries: { ...queryClient.getDefaultOptions().queries, gcTime: Infinity },
+  })
   await authStore.login({ email: account.email, password: 'fixture-only' })
   BrowserRouter = (await import('react-router')).BrowserRouter
   const { createRoot } = await import('react-dom/client')
   root = createRoot(document.getElementById('root'))
-  await act(async () => root.render(createElement(StrictMode, null, createElement(BrowserRouter, null, createElement(App)))))
+  await act(async () =>
+    root.render(createElement(StrictMode, null, createElement(BrowserRouter, null, createElement(App)))),
+  )
 })
 
 after(async () => {
@@ -88,12 +116,23 @@ after(async () => {
   globalThis.fetch = originalFetch
 })
 
-afterEach(async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 15)) }) })
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 15))
+  })
+})
 
 async function waitFor(check) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
-    try { check(); return } catch (error) { if (attempt === 99) throw error }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    try {
+      check()
+      return
+    } catch (error) {
+      if (attempt === 99) throw error
+    }
   }
 }
 
@@ -112,8 +151,13 @@ async function click(element) {
 test('the root redirects to dashboard and shows the authenticated account', () => {
   assert.equal(window.location.pathname, '/dashboard')
   assert.equal(document.title, 'Dashboard | SME Operations')
-  assert.match(document.querySelector('main').textContent, /Current order status across all accessible orders/)
-  const signOut = [...document.querySelectorAll('button')].find((button) => button.textContent.includes('Sign out'))
+  assert.match(
+    document.querySelector('main').textContent,
+    /Current order status across all accessible orders/,
+  )
+  const signOut = [...document.querySelectorAll('button')].find((button) =>
+    button.textContent.includes('Sign out'),
+  )
   assert.equal(signOut.disabled, false)
   assert.match(document.querySelector('header').textContent, /Test Operator/)
   assert.match(document.querySelector('header').textContent, /SALES/)
@@ -127,12 +171,12 @@ test('all permitted module deep links show the right heading, title, and active 
     assert.equal(document.querySelector('h1').textContent, label)
     assert.equal(document.title, `${label} | SME Operations`)
     assert.equal(document.querySelectorAll('main').length, 1)
-    for (const navigation of document.querySelectorAll('nav')) {
+    for (const navigation of document.querySelectorAll('nav[aria-label="Main navigation"]')) {
       const active = navigation.querySelectorAll('[aria-current="page"]')
       assert.equal(active.length, 1)
       assert.equal(active[0].getAttribute('href'), path)
     }
-    assert.match(document.querySelector('main').textContent, /navigation preview/)
+    assert.doesNotMatch(document.querySelector('main').textContent, /navigation preview/)
   }
 })
 
@@ -152,7 +196,9 @@ test('mobile menu toggles, closes on Escape, and restores focus to its control',
   assert.equal(details.open, true)
   details.querySelector('a').focus()
   await act(async () => {
-    details.querySelector('a').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    details
+      .querySelector('a')
+      .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   })
   assert.equal(details.open, false)
   assert.equal(document.activeElement, summary)
@@ -196,6 +242,7 @@ test('trailing slashes and case variants keep route metadata consistent', async 
 
 test('design system has one main landmark and retains its validation interaction', async () => {
   await visit('/design-system')
+  await waitFor(() => assert.ok(document.querySelector('button[type="submit"]')))
   assert.equal(document.querySelectorAll('main').length, 1)
   assert.equal(document.querySelectorAll('header').length, 1)
   assert.equal(document.querySelectorAll('a[href="#main"]').length, 1)
@@ -207,7 +254,7 @@ test('design system has one main landmark and retains its validation interaction
 })
 
 test('unknown paths show a recoverable 404 without marking a module active', async () => {
-  await visit('/orders/not-a-real-page')
+  await visit('/unknown/not-a-real-page')
   assert.equal(document.querySelector('h1').textContent, 'Page not found')
   assert.equal(document.querySelectorAll('nav [aria-current="page"]').length, 0)
   await click(document.querySelector('main a[href="/dashboard"]'))
@@ -238,7 +285,9 @@ async function fillLogin() {
 
 test('password visibility toggles and invalid credentials show Laravel field feedback', async () => {
   await fillLogin()
-  await click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Show password'))
+  await click(
+    [...document.querySelectorAll('button')].find((button) => button.textContent === 'Show password'),
+  )
   assert.equal(document.querySelector('input[name="password"]').type, 'text')
   loginStatus = 422
   await click(document.querySelector('button[type="submit"]'))
@@ -282,7 +331,11 @@ test('login blocks duplicate submissions and rejects an external return destinat
     window.dispatchEvent(new window.PopStateEvent('popstate'))
   })
   let resolve
-  pendingLogin = { promise: new Promise((done) => { resolve = done }) }
+  pendingLogin = {
+    promise: new Promise((done) => {
+      resolve = done
+    }),
+  }
   await fillLogin()
   const calls = loginCalls
   await click(document.querySelector('button[type="submit"]'))
@@ -290,7 +343,9 @@ test('login blocks duplicate submissions and rejects an external return destinat
   assert.equal(document.querySelector('button[type="submit"]').getAttribute('aria-busy'), 'true')
   await click(document.querySelector('button[type="submit"]'))
   assert.equal(loginCalls, calls + 1)
-  await act(async () => { resolve(response({ success: true, message: 'OK', data: { user: account, token: 'test-token' } })) })
+  await act(async () => {
+    resolve(response({ success: true, message: 'OK', data: { user: account, token: 'test-token' } }))
+  })
   pendingLogin = null
   assert.equal(window.location.pathname, '/dashboard')
   assert.equal(window.location.origin, 'http://localhost')
@@ -298,23 +353,53 @@ test('login blocks duplicate submissions and rejects an external return destinat
 
 const expectedActions = {
   ADMIN: {
-    orders: ['Create orders', 'Submit orders', 'Confirm orders'], products: ['Create products', 'Update products', 'Delete products'],
-    categories: ['Create categories', 'Update categories', 'Delete categories'], inventory: ['Stock in', 'Stock out'],
-    customers: ['Create customers', 'Update customers', 'Delete customers'], suppliers: ['Create suppliers', 'Update suppliers', 'Delete suppliers'],
+    orders: ['Create orders', 'Submit orders', 'Confirm orders'],
+    products: ['Create products', 'Update products', 'Delete products'],
+    categories: ['Create categories', 'Update categories', 'Delete categories'],
+    inventory: ['Stock in', 'Stock out'],
+    customers: ['Create customers', 'Update customers', 'Delete customers'],
+    suppliers: ['Create suppliers', 'Update suppliers', 'Delete suppliers'],
     delivery: ['Assign delivery', 'Start delivery', 'Complete delivery'],
   },
-  SALES: { orders: ['Create orders', 'Submit orders'], products: [], categories: [], inventory: [], customers: ['Create customers', 'Update customers'], suppliers: [], delivery: ['Assign delivery'] },
-  WAREHOUSE: { orders: ['Confirm orders'], products: ['Create products', 'Update products'], categories: [], inventory: ['Stock in', 'Stock out'], customers: [], suppliers: ['Create suppliers', 'Update suppliers'], delivery: [] },
-  DELIVERY: { orders: [], products: [], categories: [], inventory: [], customers: [], suppliers: [], delivery: ['Start delivery', 'Complete delivery'] },
+  SALES: {
+    orders: ['Create orders', 'Submit orders'],
+    products: [],
+    categories: [],
+    inventory: [],
+    customers: ['Create customers', 'Update customers'],
+    suppliers: [],
+    delivery: ['Assign delivery'],
+  },
+  WAREHOUSE: {
+    orders: ['Confirm orders'],
+    products: ['Create products', 'Update products'],
+    categories: [],
+    inventory: ['Stock in', 'Stock out'],
+    customers: [],
+    suppliers: ['Create suppliers', 'Update suppliers'],
+    delivery: [],
+  },
+  DELIVERY: {
+    orders: [],
+    products: [],
+    categories: [],
+    inventory: [],
+    customers: [],
+    suppliers: [],
+    delivery: ['Start delivery', 'Complete delivery'],
+  },
 }
 
 for (const role of ['ADMIN', 'SALES', 'WAREHOUSE', 'DELIVERY']) {
-  test(`${role} sees matching desktop/mobile navigation, page access, and action previews`, async () => {
+  test(`${role} sees matching desktop/mobile navigation, page access, and creation permissions`, async () => {
     account.role = role
-    await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+    await act(async () => {
+      await authStore.login({ email: account.email, password: 'fixture-only' })
+    })
     await visit('/dashboard')
     const hasFulfillment = ['ADMIN', 'WAREHOUSE'].includes(role)
-    for (const navigation of document.querySelectorAll('nav')) assert.equal(Boolean(navigation.querySelector('a[href="/fulfillment"]')), hasFulfillment)
+    for (const navigation of document.querySelectorAll('nav'))
+      assert.equal(Boolean(navigation.querySelector('a[href="/fulfillment"]')), hasFulfillment)
     assert.equal(Boolean(document.querySelector('main a[href="/fulfillment"]')), hasFulfillment)
     await visit('/fulfillment')
     assert.equal(document.querySelector('h1').textContent, hasFulfillment ? 'Fulfillment' : 'Access denied')
@@ -324,31 +409,40 @@ for (const role of ['ADMIN', 'SALES', 'WAREHOUSE', 'DELIVERY']) {
       await click(document.querySelector('main a[href="/dashboard"]'))
       assert.equal(document.querySelector('h1').textContent, 'Dashboard')
     } else {
-      assert.deepEqual([...document.querySelectorAll('main li')].map((item) => item.textContent), ['Start fulfillment', 'Complete fulfillment'])
+      assert.ok(document.querySelector('[aria-label="Fulfillment queues"]'))
     }
     for (const [module, labels] of Object.entries(expectedActions[role])) {
       if (module === 'products') continue // Actual product actions are covered by products.test.mjs.
       await visit(`/${module}`)
-      assert.deepEqual([...document.querySelectorAll('main li')].map((item) => item.textContent), labels, `${role}: ${module}`)
-      if (!labels.length) assert.match(document.querySelector('main').textContent, /Your role can view records/)
-      assert.equal(document.querySelectorAll('main button').length, 0, 'Preview permissions must not pretend to execute operations')
+      if (['orders', 'categories', 'customers', 'suppliers'].includes(module))
+        assert.equal(
+          Boolean(document.querySelector(`main a[href="/${module}/new"]`)),
+          labels.some((label) => label.startsWith('Create')),
+          `${role}: ${module} creation`,
+        )
+      assert.doesNotMatch(document.querySelector('main').textContent, /navigation preview/)
     }
   })
 }
 
 test('losing a capability while on that route replaces its contents and updates navigation', async () => {
   account.role = 'WAREHOUSE'
-  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  await act(async () => {
+    await authStore.login({ email: account.email, password: 'fixture-only' })
+  })
   await visit('/fulfillment')
   account.role = 'SALES'
-  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  await act(async () => {
+    await authStore.login({ email: account.email, password: 'fixture-only' })
+  })
   assert.equal(document.querySelector('h1').textContent, 'Access denied')
   assert.equal(document.querySelectorAll('nav a[href="/fulfillment"]').length, 0)
   assert.equal(document.activeElement.id, 'main')
 })
 
 const metric = (label) => document.querySelector(`section[aria-label="${label}"]`)
-const refreshDashboard = () => click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Refresh dashboard'))
+const refreshDashboard = () =>
+  click([...document.querySelectorAll('button')].find((button) => button.textContent === 'Refresh dashboard'))
 
 test('dashboard shows real totals, recent status badges, and an explicit stock limitation', async () => {
   await visit('/dashboard')
@@ -385,7 +479,9 @@ test('a permission failure suppresses a formerly cached count', async () => {
 test('a recent-order refresh failure explicitly marks previously loaded records', async () => {
   dashboardFailure = 'recent'
   await refreshDashboard()
-  await waitFor(() => assert.match(document.querySelector('main').textContent, /Showing previously loaded orders/))
+  await waitFor(() =>
+    assert.match(document.querySelector('main').textContent, /Showing previously loaded orders/),
+  )
   dashboardFailure = null
   recentEmpty = true
   dashboardTotal = 0
@@ -397,12 +493,16 @@ test('a recent-order refresh failure explicitly marks previously loaded records'
 
 test('logout clears cached data and a new session does not reuse old summaries', async () => {
   assert.ok(queryClient.getQueryCache().getAll().length > 0)
-  await act(async () => { await authStore.logout() })
+  await act(async () => {
+    await authStore.logout()
+  })
   assert.equal(queryClient.getQueryCache().getAll().length, 0)
   dashboardTotal = 900
   recentEmpty = false
   const before = dashboardRequests.length
-  await act(async () => { await authStore.login({ email: account.email, password: 'fixture-only' }) })
+  await act(async () => {
+    await authStore.login({ email: account.email, password: 'fixture-only' })
+  })
   await waitFor(() => assert.match(metric('Total orders').textContent, /900/))
   assert.ok(dashboardRequests.length >= before + 6)
 })
@@ -428,5 +528,11 @@ test('loading placeholders do not invent counts and navigating away cancels requ
   assert.equal(document.querySelector('button[aria-busy="true"]').disabled, true)
   await visit('/orders')
   dashboardPending = null
-  assert.ok(queryClient.getQueryCache().getAll().every((query) => query.state.fetchStatus === 'idle'))
+  assert.ok(
+    queryClient
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.queryKey[0] === 'dashboard')
+      .every((query) => query.state.fetchStatus === 'idle'),
+  )
 })

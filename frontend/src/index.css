@@ -2,12 +2,12 @@
 
 @theme {
   --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --color-canvas: #f5f7fa;
+  --color-canvas: #f4f7f7;
   --color-surface: #ffffff;
-  --color-ink: #172b42;
-  --color-muted: #526174;
-  --color-line: #dce3e8;
-  --color-field-border: #7c8b9d;
+  --color-ink: #173137;
+  --color-muted: #5a6d73;
+  --color-line: #e0e8e8;
+  --color-field-border: #a6b7bc;
   --color-brand: #0f766e;
   --color-brand-hover: #115e59;
   --color-brand-soft: #f0fdfa;
@@ -22,6 +22,86 @@
   --color-info-soft: #eff6ff;
   --color-neutral: #475569;
   --color-neutral-soft: #f1f5f9;
+}
+
+@layer components {
+  .button-link,
+  .button-link-secondary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand;
+  }
+  .button-link {
+    @apply border-brand bg-brand text-white shadow-sm hover:bg-brand-hover;
+  }
+  .button-link-secondary {
+    @apply border-line bg-surface text-ink hover:bg-canvas;
+  }
+  .notice-success {
+    @apply rounded-xl border border-success/15 bg-success-soft px-4 py-3 text-sm text-success;
+  }
+  .workspace-table thead {
+    @apply border-y border-line bg-canvas text-xs font-semibold tracking-wide text-muted uppercase;
+  }
+  .workspace-table th,
+  .workspace-table td {
+    @apply px-4 py-4;
+  }
+  .workspace-table tbody tr {
+    @apply border-b border-line last:border-0 hover:bg-canvas/60;
+  }
+  .workspace-table tbody th {
+    @apply min-w-44 font-medium;
+  }
+  .workspace-table tbody td {
+    @apply min-w-24;
+  }
+  .metric-card {
+    position: relative;
+    box-shadow: 0 2px 8px #17313704;
+  }
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    right: 1.5rem;
+    top: 1.5rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #7fb8a6;
+  }
+  .login-story::before {
+    content: '';
+    position: absolute;
+    width: 50rem;
+    height: 50rem;
+    border-radius: 50%;
+    right: -30rem;
+    top: -15rem;
+    border: 1px solid #ffffff14;
+    box-shadow:
+      0 0 0 5rem #ffffff03,
+      0 0 0 10rem #ffffff03,
+      0 0 0 15rem #ffffff02;
+  }
+}
+
+@media print {
+  aside,
+  header,
+  button,
+  nav,
+  a[href='#main'] {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .lg\:pl-64 {
+    padding-left: 0 !important;
+  }
+  body {
+    background: white;
+  }
 }
 
 @layer base {
@@ -40,4 +120,29 @@
   ::selection {
     @apply bg-brand text-white;
   }
+}
+
+/* Theme the desktop navigation after utility layers. */
+.desktop-sidebar {
+  background: #102f30;
+  border-color: #244345;
+  color: #f0fdfa;
+}
+.desktop-sidebar .text-muted {
+  color: #a2bcbd;
+}
+.desktop-sidebar .border-line {
+  border-color: #294749;
+}
+.desktop-sidebar .app-nav-link {
+  color: #b9cece;
+}
+.desktop-sidebar .app-nav-link:hover {
+  background: #1b3d3e;
+  color: white;
+}
+.desktop-sidebar .app-nav-link.is-active {
+  background: #245250;
+  color: #d4fff0;
+  box-shadow: inset 3px 0 0 #65d9ba;
 }
