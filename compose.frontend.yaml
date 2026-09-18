@@ -1,0 +1,18 @@
+services:
+  frontend:
+    image: sme-frontend:lesson-2
+
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:8001/api/v1
+
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:8081:8080"
+
+    depends_on:
+      api:
+        condition: service_healthy
