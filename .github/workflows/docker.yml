@@ -1,0 +1,44 @@
+name: Docker checks
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/docker.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v6
+
+      - name: Build backend image
+        run: docker build --tag sme-backend:ci ./backend
+
+      - name: Check backend runtime
+        run: |
+          docker run --rm sme-backend:ci php artisan --version
+          docker run --rm sme-backend:ci php -r 'exit(extension_loaded("pdo_pgsql") ? 0 : 1);'
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL=/api/v1 \
+            --tag sme-frontend:ci \
+            ./frontend
+
+      - name: Check frontend Nginx configuration
+        run: docker run --rm sme-frontend:ci nginx -t
