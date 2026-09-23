@@ -1,0 +1,30 @@
+services:
+  backend:
+    environment:
+      APP_URL: https://lahiru-sme-demo.duckdns.org
+
+  frontend:
+    image: sme-frontend:aws-1
+    build:
+      args:
+        VITE_API_BASE_URL: /api/v1
+    volumes:
+      - "./frontend/nginx.aws.conf:/etc/nginx/conf.d/default.conf:ro"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./Caddyfile:/etc/caddy/Caddyfile:ro"
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
