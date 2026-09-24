@@ -1,0 +1,80 @@
+name: Publish images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/backend.yml
+
+  frontend-tests:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/frontend.yml
+
+  publish:
+    needs: [backend-tests, frontend-tests]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ECR_REGISTRY: 102798329445.dkr.ecr.ap-south-1.amazonaws.com
+      IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v6
+
+      - name: Build backend image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --tag "$ECR_REGISTRY/sme-backend:$IMAGE_TAG" \
+            ./backend
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --build-arg VITE_API_BASE_URL=/api/v1 \
+            --tag "$ECR_REGISTRY/sme-frontend:$IMAGE_TAG" \
+            ./frontend
+
+      - name: Check image runtimes
+        run: |
+          docker run --rm "$ECR_REGISTRY/sme-backend:$IMAGE_TAG" php artisan --version
+          docker run --rm "$ECR_REGISTRY/sme-backend:$IMAGE_TAG" php -r 'exit(extension_loaded("pdo_pgsql") ? 0 : 1);'
+          docker run --rm "$ECR_REGISTRY/sme-frontend:$IMAGE_TAG" nginx -t
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::102798329445:role/sme-github-ecr-push-role
+          aws-region: ap-south-1
+          allowed-account-ids: '102798329445'
+
+      - name: Log Docker into ECR
+        shell: bash
+        run: |
+          aws ecr get-login-password --region ap-south-1 |
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Upload both images
+        run: |
+          docker push "$ECR_REGISTRY/sme-backend:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/sme-frontend:$IMAGE_TAG"
+
+      - name: Record published images
+        run: |
+          echo "Image tag: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend: $ECR_REGISTRY/sme-backend:$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: $ECR_REGISTRY/sme-frontend:$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
