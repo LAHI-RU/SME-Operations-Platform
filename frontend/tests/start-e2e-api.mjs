@@ -36,7 +36,19 @@ try {
   let ready = false
   for (let attempt = 0; attempt < 40; attempt++) {
     try {
-      await docker('exec', containerId, 'pg_isready', '-U', 'postgres', '-d', 'sme_e2e_browser')
+      await docker(
+        'exec',
+        containerId,
+        'pg_isready',
+        '-h',
+        '127.0.0.1',
+        '-p',
+        '5432',
+        '-U',
+        'postgres',
+        '-d',
+        'sme_e2e_browser',
+      )
       ready = true
       break
     } catch {
