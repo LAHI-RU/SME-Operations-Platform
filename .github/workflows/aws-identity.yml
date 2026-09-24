@@ -1,4 +1,4 @@
-name: Check AWS identity
+name: Check AWS connection
 
 on:
   workflow_dispatch:
@@ -8,21 +8,25 @@ permissions:
   id-token: write
 
 jobs:
-  identity:
+  connection:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Show identity details
-        uses: actions/github-script@v9
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          script: |
-            const token = await core.getIDToken('sts.amazonaws.com');
-            core.setSecret(token);
+          role-to-assume: arn:aws:iam::102798329445:role/sme-github-ecr-push-role
+          aws-region: ap-south-1
+          role-session-name: sme-github-connection-check
+          allowed-account-ids: "102798329445"
 
-            const claims = JSON.parse(
-              Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
-            );
+      - name: Show AWS identity
+        run: aws sts get-caller-identity
 
-            core.info(`Subject: ${claims.sub}`);
-            core.info(`Audience: ${claims.aud}`);
+      - name: Check backend repository access
+        run: aws ecr describe-images --repository-name sme-backend
+
+      - name: Check frontend repository access
+        run: aws ecr describe-images --repository-name sme-frontend
