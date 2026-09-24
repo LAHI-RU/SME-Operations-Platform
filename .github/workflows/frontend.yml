@@ -1,10 +1,11 @@
 name: Frontend checks
 on:
   push:
-    paths: ['frontend/**', 'backend/**', '.github/workflows/frontend.yml']
+    paths: ["frontend/**", "backend/**", ".github/workflows/frontend.yml"]
   pull_request:
-    paths: ['frontend/**', 'backend/**', '.github/workflows/frontend.yml']
+    paths: ["frontend/**", "backend/**", ".github/workflows/frontend.yml"]
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -18,12 +19,12 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: "8.3"
           extensions: mbstring, pdo_pgsql, pdo_sqlite, sqlite3
           coverage: none
       - run: npm ci
