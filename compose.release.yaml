@@ -1,0 +1,7 @@
+services:
+  backend:
+    image: 102798329445.dkr.ecr.ap-south-1.amazonaws.com/sme-backend:79b00c700829aa00b4705280cf4a447eac9be920-36019728829-1
+
+  frontend:
+    image: 102798329445.dkr.ecr.ap-south-1.amazonaws.com/sme-frontend:79b00c700829aa00b4705280cf4a447eac9be920-36019728829-1
+    build: !reset null
