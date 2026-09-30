@@ -3,6 +3,10 @@ name: Publish images
 on:
   workflow_dispatch:
 
+concurrency:
+  group: sme-production-release
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -20,6 +24,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+  outputs:
+      image_tag: ${{ steps.record.outputs.image_tag }}
 
     permissions:
       contents: read
@@ -59,7 +66,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::102798329445:role/sme-github-ecr-push-role
           aws-region: ap-south-1
-          allowed-account-ids: '102798329445'
+          allowed-account-ids: "102798329445"
 
       - name: Log Docker into ECR
         shell: bash
@@ -73,8 +80,190 @@ jobs:
           docker push "$ECR_REGISTRY/sme-frontend:$IMAGE_TAG"
 
       - name: Record published images
+        id: record
         run: |
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
           echo "Image tag: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Backend: $ECR_REGISTRY/sme-backend:$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: $ECR_REGISTRY/sme-frontend:$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      INSTANCE_ID: i-03bd0c5ccfdd96e98
+      IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+      AWS_PAGER: ""
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v6
+
+      - name: Check deployment script syntax
+        run: bash -n scripts/deploy-ec2.sh
+
+      - name: Authenticate for deployment
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::102798329445:role/sme-github-deploy-role
+          aws-region: ap-south-1
+          allowed-account-ids: '102798329445'
+
+      - name: Prepare deployment request
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import shlex
+
+          tag = os.environ["IMAGE_TAG"]
+          if not re.fullmatch(r"[a-f0-9]{40}-[0-9]+-[0-9]+", tag):
+              raise SystemExit("Invalid release tag.")
+          if tag.split("-")[0] != os.environ["GITHUB_SHA"]:
+              raise SystemExit("Release tag does not match this workflow commit.")
+
+          remote_script = r'''
+          set -Eeuo pipefail
+          export GIT_TERMINAL_PROMPT=0
+
+          APP=/home/ubuntu/apps/sme-platform
+          STATE=/home/ubuntu/sme-deploy
+          TAG="$1"
+          SHA="${TAG%%-*}"
+
+          mkdir -p "$STATE"
+          chmod 700 "$STATE"
+
+          exec 8>"$STATE/workflow.lock"
+          if ! flock -n 8; then
+            echo "Another release command is still running."
+            exit 1
+          fi
+
+          repo_git() {
+            runuser -u ubuntu -- git -C "$APP" "$@"
+          }
+
+          if [[ -n "$(repo_git status --porcelain)" ]]; then
+            echo "Server checkout contains local changes. Resolve them first."
+            exit 1
+          fi
+
+          repo_git fetch origin main
+          repo_git merge-base --is-ancestor "$SHA" FETCH_HEAD
+
+          if ! repo_git diff --quiet HEAD "$SHA" -- \
+            compose.yaml compose.backend.yaml compose.frontend.yaml \
+            compose.aws.yaml backend/nginx.conf frontend/nginx.aws.conf \
+            Caddyfile; then
+            echo "Infrastructure configuration changed."
+            echo "Review and apply those changes manually before image deployment."
+            exit 1
+          fi
+
+          repo_git merge --ff-only "$SHA"
+
+          if [[ "$(repo_git rev-parse HEAD)" != "$SHA" ]]; then
+            echo "Server checkout is ahead of this release. Deployment stopped."
+            exit 1
+          fi
+
+          bash -n "$APP/scripts/deploy-ec2.sh"
+          exec bash "$APP/scripts/deploy-ec2.sh" "$TAG"
+          '''
+
+          command = "bash -c " + shlex.quote(remote_script)
+          command += " -- " + shlex.quote(tag)
+
+          request = {
+              "InstanceIds": [os.environ["INSTANCE_ID"]],
+              "DocumentName": "AWS-RunShellScript",
+              "Comment": "Deploy SME release " + tag,
+              "TimeoutSeconds": 120,
+              "Parameters": {
+                  "commands": [command],
+                  "executionTimeout": ["1200"]
+              }
+          }
+
+          with open("ssm-deployment.json", "w") as output:
+              json.dump(request, output)
+          PY
+
+      - name: Send deployment command
+        id: send
+        shell: bash
+        run: |
+          command_id=$(aws ssm send-command \
+            --cli-input-json file://ssm-deployment.json \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "SSM command: $command_id" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for deployment
+        shell: bash
+        env:
+          COMMAND_ID: ${{ steps.send.outputs.command_id }}
+        run: |
+          for attempt in $(seq 1 150); do
+            if aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --cli-connect-timeout 10 \
+              --cli-read-timeout 20 \
+              --output json > result.json 2> result-error.txt; then
+
+              status=$(jq -r '.Status' result.json)
+              echo "Deployment status: $status"
+
+              case "$status" in
+                Success)
+                  jq -e '.ResponseCode == 0' result.json
+                  exit 0
+                  ;;
+                Failed|TimedOut|Cancelled)
+                  exit 1
+                  ;;
+                Pending|InProgress|Delayed|Cancelling)
+                  ;;
+                *)
+                  echo "Unexpected SSM status: $status"
+                  exit 1
+                  ;;
+              esac
+            else
+              if ! grep -q 'InvocationDoesNotExist' result-error.txt; then
+                cat result-error.txt
+                exit 1
+              fi
+            fi
+
+            sleep 10
+          done
+
+          echo "Timed out waiting for SSM. Check the command in AWS before retrying."
+          exit 1
+
+      - name: Show deployment result
+        if: ${{ always() && steps.send.outputs.command_id != '' }}
+        shell: bash
+        env:
+          COMMAND_ID: ${{ steps.send.outputs.command_id }}
+        run: |
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{Status:Status,ExitCode:ResponseCode,Output:StandardOutputContent,Error:StandardErrorContent}' \
+            --output json
