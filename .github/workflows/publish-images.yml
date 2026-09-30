@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-  outputs:
+    outputs:
       image_tag: ${{ steps.record.outputs.image_tag }}
 
     permissions:
@@ -115,7 +115,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::102798329445:role/sme-github-deploy-role
           aws-region: ap-south-1
-          allowed-account-ids: '102798329445'
+          allowed-account-ids: "102798329445"
 
       - name: Prepare deployment request
         shell: bash
